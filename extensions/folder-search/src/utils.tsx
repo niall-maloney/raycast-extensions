@@ -132,6 +132,23 @@ const maybeMoveResultToTrash = async (result: SpotlightSearchResult, resultWasTr
   await confirmAlert(options);
 };
 
+const lastUsedSort = (a: SpotlightSearchResult, b: SpotlightSearchResult) => {
+  const [safeA, safeB] = [a.kMDItemLastUsedDate || 0, b.kMDItemLastUsedDate || 0];
+
+  return new Date(safeB).getTime() - new Date(safeA).getTime();
+};
+
+const fixDoubleConcat = (text: string): string => {
+  const regex = /^(.+)\1$/; // Matches a string followed by the same string again
+
+  if (regex.test(text)) {
+    const originalText = text.replace(regex, "$1");
+    return originalText;
+  }
+
+  return text;
+};
+
 export {
   loadPlugins,
   safeSearchScope,
@@ -140,4 +157,6 @@ export {
   showFolderInfoInFinder,
   copyFolderToClipboard,
   maybeMoveResultToTrash,
+  lastUsedSort,
+  fixDoubleConcat,
 };

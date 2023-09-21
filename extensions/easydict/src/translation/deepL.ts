@@ -1,8 +1,8 @@
 /*
  * @author: tisfeng
  * @createTime: 2022-08-03 10:18
- * @lastEditor: tisfeng
- * @lastEditTime: 2022-10-13 00:53
+ * @lastEditor: Tisfeng
+ * @lastEditTime: 2022-10-30 23:12
  * @fileName: deepL.ts
  *
  * Copyright (c) 2022 by tisfeng, All Rights Reserved.
@@ -26,7 +26,7 @@ const deepLAuthStoredKey = "deepLAuthStoredKey";
  * https://www.deepl.com/zh/docs-api/translating-text
  */
 export async function requestDeepLTranslate(queryWordInfo: QueryWordInfo): Promise<QueryTypeResult> {
-  console.log(`---> start rquest DeepL`);
+  console.log(`---> start request DeepL`);
   const { fromLanguage, toLanguage, word } = queryWordInfo;
   const sourceLang = getDeepLLangCode(fromLanguage);
   const targetLang = getDeepLLangCode(toLanguage);
@@ -96,7 +96,9 @@ export async function requestDeepLTranslate(queryWordInfo: QueryWordInfo): Promi
                 .catch((err) => reject(err));
             });
           }
+          return;
         }
+
         if (errorCode === 403) {
           errorInfo.message = "Authorization failed"; // Authorization failed. Please supply a valid auth_key parameter.
         }
@@ -166,7 +168,7 @@ interface DeepLUsage {
  *
  * https://www.deepl.com/zh/docs-api/other-functions/monitoring-usage/
  */
-function checkIfKeyVaild(key: string): Promise<boolean> {
+function checkIfKeyValid(key: string): Promise<boolean> {
   console.log(`test a deepL key: ${key}`);
   const url = "https://api-free.deepl.com/v2/usage";
   const params = {
@@ -188,7 +190,7 @@ function checkIfKeyVaild(key: string): Promise<boolean> {
         }
       })
       .catch((err) => {
-        console.error(`---> isVaildKey deepL error: ${err}`);
+        console.error(`---> isValidKey deepL error: ${err}`);
 
         // if error, remove key from wildEncryptedDeepLKeys
         const encryptedKey = myEncrypt(key);
@@ -225,7 +227,7 @@ export async function getAndStoreValidDeepLKey(encryptedKeys: string[]): Promise
   if (encryptedKeys.length > 0) {
     for (const encryptedKey of encryptedKeys) {
       const key = myDecrypt(encryptedKey);
-      if (await checkIfKeyVaild(key)) {
+      if (await checkIfKeyValid(key)) {
         // remove key
         encryptedKeys.splice(encryptedKeys.indexOf(encryptedKey), 1);
         console.log(`---> find and store new key: ${key}`);

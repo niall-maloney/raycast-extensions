@@ -31,7 +31,7 @@ export default function Profiles(props: ProfileProps) {
             title={item.name}
             subtitle="Anybox"
             icon={{
-              source: `http://localhost:6391/sf-symbols/${item.icon}`,
+              source: `http://127.0.0.1:6391/sf-symbols/${item.icon}`,
               fallback: Icon.Coins,
               tintColor: {
                 light: "#505151",
@@ -39,19 +39,19 @@ export default function Profiles(props: ProfileProps) {
                 adjustContrast: true,
               },
             }}
-            accessoryTitle="Command"
+            accessories={[{ text: "Command" }]}
             key={item.id}
             actions={
               <ActionPanel>
                 <Action
                   title="Open Command"
-                  onAction={() => {
-                    pop();
+                  onAction={async () => {
                     if (props.type == ActionType.Switch) {
-                      postAndCloseMainWindow(`switch-profile/${item.id}`);
+                      await postAndCloseMainWindow(`switch-profile/${item.id}`);
                     } else {
-                      postAndCloseMainWindow(`open-all-in-profile/${item.id}`);
+                      await postAndCloseMainWindow(`open-all-in-profile/${item.id}`);
                     }
+                    pop();
                   }}
                 />
               </ActionPanel>

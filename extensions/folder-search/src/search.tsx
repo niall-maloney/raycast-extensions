@@ -13,6 +13,10 @@ import {
   environment,
   popToRoot,
   showToast,
+  showHUD,
+  confirmAlert,
+  open,
+  getSelectedFinderItems,
 } from "@raycast/api";
 
 import { usePromise } from "@raycast/utils";
@@ -30,7 +34,12 @@ import {
   showFolderInfoInFinder,
   copyFolderToClipboard,
   maybeMoveResultToTrash,
+  lastUsedSort,
+  fixDoubleConcat,
 } from "./utils";
+
+import fse from "fs-extra";
+import path = require("node:path");
 
 // allow string indexing on Icons
 interface IconDictionary {
@@ -46,6 +55,16 @@ export default function Command() {
   const [searchScope, setSearchScope] = useState<string>("");
   const [isShowingDetail, setIsShowingDetail] = useState<boolean>(true);
   const [results, setResults] = useState<SpotlightSearchResult[]>([]);
+
+  // hack to fix annoying double text during fallback. Typing helloworld results in helloworldhelloworld
+  let fixedText = "";
+  useEffect(() => {
+    fixedText = fixDoubleConcat(searchText);
+
+    if (fixedText !== searchText) {
+      setSearchText(fixedText); // Update the state of searchText
+    }
+  }, [searchText]);
 
   const [plugins, setPlugins] = useState<FolderSearchPlugin[]>([]);
 
@@ -98,7 +117,7 @@ export default function Command() {
       onData(preferences) {
         setPinnedResults(preferences?.pinned || []);
         setSearchScope(preferences?.searchScope || "");
-        setIsShowingDetail(preferences?.isShowingDetail || true);
+        setIsShowingDetail(preferences?.isShowingDetail);
         setHasCheckedPreferences(true);
       },
       onError() {
@@ -121,7 +140,7 @@ export default function Command() {
       searchScope,
       abortable,
       (result: SpotlightSearchResult) => {
-        setResults((results) => [result, ...results]);
+        setResults((results) => [result, ...results].sort(lastUsedSort));
       },
     ],
     {
@@ -173,7 +192,17 @@ export default function Command() {
       setResults([]);
       setIsQuerying(false);
 
-      setCanExecute(true);
+      // short-circuit for 'pinned'
+      if (searchScope === "pinned") {
+        setResults(
+          pinnedResults.filter((pin) =>
+            pin.kMDItemFSName.toLocaleLowerCase().includes(searchText.replace(/[[|\]]/gi, "").toLocaleLowerCase())
+          )
+        );
+        setCanExecute(false);
+      } else {
+        setCanExecute(true);
+      }
     })();
   }, [searchText, searchScope]);
 
@@ -230,8 +259,13 @@ export default function Command() {
                     />
                     <List.Item.Detail.Metadata.Separator />
                     <List.Item.Detail.Metadata.Label
-                      title="Last opened"
+                      title="Last used"
                       text={result.kMDItemLastUsedDate?.toLocaleString() || "-"}
+                    />
+                    <List.Item.Detail.Metadata.Separator />
+                    <List.Item.Detail.Metadata.Label
+                      title="Use count"
+                      text={result.kMDItemUseCount?.toLocaleString() || "-"}
                     />
                     <List.Item.Detail.Metadata.Separator />
                   </List.Item.Detail.Metadata>
@@ -250,6 +284,61 @@ export default function Command() {
                   title="Show in Finder"
                   path={result.path}
                   onShow={() => popToRoot({ clearSearchBar: true })}
+                />
+                <Action
+                  title="Send Finder selection to Folder"
+                  icon={Icon.Folder}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                  onAction={async () => {
+                    const selectedItems = await getSelectedFinderItems();
+
+                    if (selectedItems.length === 0) {
+                      await showHUD(`⚠️  No Finder selection to send.`);
+                    } else {
+                      for (const item of selectedItems) {
+                        // Source path = item
+                        // Source file name = path.basename(item)
+                        //
+                        // Destination folder = result.path
+                        // Destination file = result.path + '/' + path.basename(item)
+
+                        const sourceFileName = path.basename(item.path);
+                        const destinationFolder = result.path;
+                        const destinationFile = result.path + "/" + path.basename(item.path);
+
+                        try {
+                          const exists = await fse.pathExists(destinationFile);
+                          if (exists) {
+                            const overwrite = await confirmAlert({
+                              title: "Ooverwrite the existing file?",
+                              message: sourceFileName + " already exists in " + destinationFolder,
+                            });
+
+                            if (overwrite) {
+                              if (item.path == destinationFile) {
+                                await showHUD("The source and destination file are the same");
+                              }
+                              fse.moveSync(item.path, destinationFile, { overwrite: true });
+                              await showHUD("Moved file " + path.basename(item.path) + " to " + destinationFolder);
+                            } else {
+                              await showHUD("Cancelling move");
+                            }
+                          } else {
+                            fse.moveSync(item.path, destinationFile);
+                            await showHUD("Moved file " + sourceFileName + " to " + destinationFolder);
+                          }
+
+                          open(result.path);
+                        } catch (e) {
+                          console.error("ERROR " + String(e));
+                          await showToast(Toast.Style.Failure, "Error moving file " + String(e));
+                        }
+                      }
+                    }
+
+                    closeMainWindow();
+                    popToRoot({ clearSearchBar: true });
+                  }}
                 />
                 <Action.OpenWith
                   title="Open With..."
@@ -343,12 +432,15 @@ export default function Command() {
       onSearchTextChange={setSearchText}
       searchBarPlaceholder="Search folders"
       isShowingDetail={isShowingDetail}
+      throttle={true}
+      searchText={searchText}
       selectedItemId={selectedItemId}
       searchBarAccessory={
         hasCheckedPlugins && hasCheckedPreferences ? (
           <List.Dropdown tooltip="Scope" onChange={setSearchScope} value={searchScope}>
-            <List.Dropdown.Item title="This Mac" value=""></List.Dropdown.Item>
-            <List.Dropdown.Item title={`User (${userInfo().username})`} value={userInfo().homedir}></List.Dropdown.Item>
+            <List.Dropdown.Item title="Pinned" value="pinned" />
+            <List.Dropdown.Item title="This Mac" value="" />
+            <List.Dropdown.Item title={`User (${userInfo().username})`} value={userInfo().homedir} />
           </List.Dropdown>
         ) : null
       }

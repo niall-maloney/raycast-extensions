@@ -106,12 +106,13 @@ export const getFilesInDir = async (dirPath: string) => {
 
 export const formatResult = (result: string) => {
   const title = result.split("/");
-  return decodeURIComponent(title[title.length - 1]);
+  return title[title.length - 1];
 };
 
 export const formatFilePath = (pageName: string) => {
   const dbName = getUserConfiguredGraphPath().split("/")[getUserConfiguredGraphPath().split("/").length - 1];
-  const finalURL = encodeURI(`logseq://graph/${dbName}?file=${pageName}`);
+  const title = pageName.split("/")[pageName.split("/").length - 1];
+  const finalURL = encodeURI(`logseq://graph/${dbName}?page=${title}`);
   return finalURL;
 };
 

@@ -5,7 +5,6 @@ import { Action, ActionPanel, Color, Icon, List, getPreferenceValues, popToRoot 
 import { useEffect, useState } from "react";
 
 import mdfind from "mdfind";
-import moment from "moment";
 
 import { copyRecentToClipboard, showInfoInFinder, maybeMoveResultToTrash } from "./utils";
 
@@ -13,30 +12,37 @@ import { Scope, ScopeDictionary, SpotlightResult } from "./types";
 
 interface RecentsPreferences {
   limit: string;
+  excludeFolders: boolean;
 }
+
+const queryScopesSharedQueryPart = (excludeFolders: boolean) =>
+  `(kMDItemLastUsedDate = "*") && ((kMDItemContentTypeTree = public.content) || (kMDItemContentTypeTree = "com.microsoft.*"cdw) || (kMDItemContentTypeTree = public.archive) ${
+    !excludeFolders ? `|| (kMDItemContentTypeTree = public.folder)` : ""
+  }) && (kMDItemSupportFileType != MDSystemFile)`;
 
 const queryScopes = {
   default: {
-    query: `kMDItemLastUsedDate = "*"`,
+    query: (excludeFolders: boolean) => `${queryScopesSharedQueryPart(excludeFolders)}`,
     directories: [`${homedir()}`],
     filters: true,
   },
   applications: {
-    query: 'kMDItemKind == Application && kMDItemLastUsedDate = "*"',
+    query: () => `kMDItemKind = Application && kMDItemLastUsedDate = "*"`,
     directories: [`${homedir()}/Applications`, "/Applications", "/System/Applications"],
   },
   documents: {
-    query: 'kMDItemLastUsedDate = "*"',
+    query: (excludeFolders: boolean) => `${queryScopesSharedQueryPart(excludeFolders)}`,
     directories: [`${homedir()}/Documents`],
     filters: true,
   },
   downloads: {
-    query: 'kMDItemLastUsedDate = "*"',
+    query: (excludeFolders: boolean) => `${queryScopesSharedQueryPart(excludeFolders)}`,
     directories: [`${homedir()}/Downloads`],
     filters: true,
   },
   folders: {
-    query: 'kMDItemKind == Folder && kMDItemLastUsedDate = "*"',
+    query: () =>
+      '(kMDItemContentTypeTree = public.folder && kMDItemLastUsedDate = "*" && kMDItemSupportFileType != MDSystemFile)',
     directories: [`${homedir()}`],
   },
 } as ScopeDictionary;
@@ -44,14 +50,15 @@ const queryScopes = {
 const getRecents = async (scope: string | undefined, callback: (result: SpotlightResult) => void): Promise<boolean> => {
   return await new Promise((resolve) => {
     let queryParts: Scope = queryScopes["default"];
-    const { limit } = getPreferenceValues<RecentsPreferences>();
+    const { limit, excludeFolders } = getPreferenceValues<RecentsPreferences>();
+    const shouldExcludeFolders = excludeFolders && !["folders", "applications"].includes(scope || "default");
 
     if (scope) {
       queryParts = queryScopes[scope];
     }
 
     const query = mdfind({
-      query: queryParts.query,
+      query: queryParts.query(shouldExcludeFolders),
       directories: queryParts.directories,
       attributes: ["kMDItemDisplayName", "kMDItemKind", "kMDItemLastUsedDate"],
       limit: parseInt(limit, 10) || 1000,
@@ -77,6 +84,7 @@ export default function Command(props: { scope?: string | undefined }) {
   const [filtered, setFiltered] = useState<SpotlightResult[]>([]);
 
   const [hasFilters, setHasFilters] = useState<boolean | undefined>(true);
+  const userHome = homedir();
 
   useEffect(() => {
     (async () => {
@@ -97,13 +105,9 @@ export default function Command(props: { scope?: string | undefined }) {
       return;
     }
 
-    setFiltered(
-      recents.sort(
-        (a, b) =>
-          moment(b.kMDItemLastUsedDate, "YYYY-MM-DD hh:mm:ss +0000").unix() -
-          moment(a.kMDItemLastUsedDate, "YYYY-MM-DD hh:mm:ss +0000").unix()
-      )
-    );
+    const sorted = recents.sort((a, b) => Date.parse(b.kMDItemLastUsedDate) - Date.parse(a.kMDItemLastUsedDate));
+
+    setFiltered(sorted);
 
     setKinds(
       recents
@@ -145,86 +149,88 @@ export default function Command(props: { scope?: string | undefined }) {
         ) : null
       }
     >
-      {filtered.map((recent, recentIndex) => (
-        <List.Item
-          key={recentIndex}
-          icon={{ fileIcon: recent.kMDItemPath }}
-          title={recent.kMDItemDisplayName}
-          quickLook={{ path: recent.kMDItemPath, name: recent.kMDItemDisplayName }}
-          actions={
-            <ActionPanel>
-              <Action.Open
-                title={`Open ${recent.kMDItemKind}`}
-                icon={{ fileIcon: recent.kMDItemPath }}
-                target={recent.kMDItemPath}
-                onOpen={() => popToRoot({ clearSearchBar: true })}
-              />
-              <Action.ShowInFinder
-                icon={Icon.Finder}
-                title="Show In Finder"
-                path={recent.kMDItemPath}
-                onShow={() => popToRoot({ clearSearchBar: true })}
-              />
-              <Action.ToggleQuickLook title="Quick Look" shortcut={{ modifiers: ["cmd"], key: "y" }} />
-              <Action.OpenWith
-                title="Open With..."
-                shortcut={{ modifiers: ["cmd"], key: "o" }}
-                path={recent.kMDItemPath}
-                onOpen={() => popToRoot({ clearSearchBar: true })}
-              />
-              <Action
-                title="Show Info in Finder"
-                icon={Icon.Finder}
-                shortcut={{ modifiers: ["cmd"], key: "i" }}
-                onAction={() => showInfoInFinder(recent)}
-              />
-              <ActionPanel.Section>
-                <Action.CopyToClipboard
-                  title={`Copy ${recent.kMDItemKind}`}
-                  shortcut={{ modifiers: ["cmd"], key: "." }}
-                  content={``}
-                  onCopy={() => copyRecentToClipboard(recent)}
+      {filtered.map((recent, recentIndex) => {
+        const { kMDItemPath, kMDItemDisplayName, kMDItemLastUsedDate, kMDItemKind } = recent;
+        const escapedName = kMDItemDisplayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(`/${escapedName}`);
+        const subtitle = kMDItemPath.replace(userHome, "~").replace(regex, "");
+
+        return (
+          <List.Item
+            key={recentIndex}
+            icon={{ fileIcon: kMDItemPath }}
+            title={kMDItemDisplayName}
+            subtitle={subtitle}
+            quickLook={{ path: kMDItemPath, name: kMDItemDisplayName }}
+            actions={
+              <ActionPanel>
+                <Action.Open
+                  title={`Open ${kMDItemKind}`}
+                  icon={{ fileIcon: kMDItemPath }}
+                  target={kMDItemPath}
+                  onOpen={() => popToRoot({ clearSearchBar: true })}
                 />
-                <Action.CopyToClipboard
-                  title="Copy Name"
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "." }}
-                  content={basename(recent.kMDItemPath)}
+                <Action.ShowInFinder
+                  icon={Icon.Finder}
+                  title="Show In Finder"
+                  path={kMDItemPath}
+                  onShow={() => popToRoot({ clearSearchBar: true })}
                 />
-                <Action.CopyToClipboard
-                  icon={Icon.Clipboard}
-                  title="Copy Path"
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "," }}
-                  content={recent.kMDItemPath}
+                <Action.ToggleQuickLook title="Quick Look" shortcut={{ modifiers: ["cmd"], key: "y" }} />
+                <Action.OpenWith
+                  title="Open With..."
+                  shortcut={{ modifiers: ["cmd"], key: "o" }}
+                  path={kMDItemPath}
+                  onOpen={() => popToRoot({ clearSearchBar: true })}
                 />
-              </ActionPanel.Section>
-              <ActionPanel.Section>
-                <Action.CreateQuicklink
-                  title="Create Quicklink"
-                  icon={Icon.Link}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
-                  quicklink={{ link: recent.kMDItemPath, name: basename(recent.kMDItemPath) }}
-                />
-              </ActionPanel.Section>
-              <ActionPanel.Section>
                 <Action
-                  title="Move to Trash"
-                  style={Action.Style.Destructive}
-                  icon={{ source: Icon.Trash, tintColor: Color.Red }}
-                  shortcut={{ modifiers: ["ctrl"], key: "x" }}
-                  onAction={() => maybeMoveResultToTrash(recent)}
+                  title="Show Info in Finder"
+                  icon={Icon.Finder}
+                  shortcut={{ modifiers: ["cmd"], key: "i" }}
+                  onAction={() => showInfoInFinder(recent)}
                 />
-              </ActionPanel.Section>
-            </ActionPanel>
-          }
-          accessories={[
-            {
-              text: `Last Used: ${moment(recent.kMDItemLastUsedDate, "YYYY-MM-DD hh:mm:ss +0000").format(
-                "DD/MM/YYYY"
-              )}`,
-            },
-          ]}
-        />
-      ))}
+                <ActionPanel.Section>
+                  <Action.CopyToClipboard
+                    title={`Copy ${kMDItemKind}`}
+                    shortcut={{ modifiers: ["cmd"], key: "." }}
+                    content={``}
+                    onCopy={() => copyRecentToClipboard(recent)}
+                  />
+                  <Action.CopyToClipboard
+                    title="Copy Name"
+                    shortcut={{ modifiers: ["cmd", "shift"], key: "." }}
+                    content={basename(kMDItemPath)}
+                  />
+                  <Action.CopyToClipboard
+                    icon={Icon.Clipboard}
+                    title="Copy Path"
+                    shortcut={{ modifiers: ["cmd", "shift"], key: "," }}
+                    content={kMDItemPath}
+                  />
+                </ActionPanel.Section>
+                <ActionPanel.Section>
+                  <Action.CreateQuicklink
+                    title="Create Quicklink"
+                    icon={Icon.Link}
+                    shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
+                    quicklink={{ link: kMDItemPath, name: basename(kMDItemPath) }}
+                  />
+                </ActionPanel.Section>
+                <ActionPanel.Section>
+                  <Action
+                    title="Move to Trash"
+                    style={Action.Style.Destructive}
+                    icon={{ source: Icon.Trash, tintColor: Color.Red }}
+                    shortcut={{ modifiers: ["ctrl"], key: "x" }}
+                    onAction={() => maybeMoveResultToTrash(recent)}
+                  />
+                </ActionPanel.Section>
+              </ActionPanel>
+            }
+            accessories={[{ date: new Date(Date.parse(kMDItemLastUsedDate)), tooltip: "Last used" }]}
+          />
+        );
+      })}
     </List>
   );
 }
