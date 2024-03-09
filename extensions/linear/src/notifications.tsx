@@ -13,10 +13,10 @@ import useUsers from "./hooks/useUsers";
 import { getErrorMessage } from "./helpers/errors";
 import { getNotificationIcon, getNotificationTitle } from "./helpers/notifications";
 import { getUserIcon } from "./helpers/users";
-import { isLinearInstalled } from "./helpers/isLinearInstalled";
 
 import View from "./components/View";
 import IssueDetail from "./components/IssueDetail";
+import OpenInLinear from "./components/OpenInLinear";
 
 function Notifications() {
   const {
@@ -177,12 +177,20 @@ function Notifications() {
             {notifications.map((notification) => {
               const createdAt = new Date(notification.createdAt);
 
+              const displayName = notification.actor ? notification.actor.displayName : "Linear";
+
+              const keywords = [displayName];
+
+              if (notification.issue) {
+                keywords.push(...notification.issue.identifier.split("-"));
+                keywords.push(notification.issue.title);
+              }
+
               return (
                 <List.Item
-                  title={`${getNotificationTitle(notification)} by ${
-                    notification.actor ? notification.actor.displayName : "Linear"
-                  }`}
+                  title={`${getNotificationTitle(notification)} by ${displayName}`}
                   key={notification.id}
+                  keywords={keywords}
                   icon={notification.actor ? getUserIcon(notification.actor) : "linear.png"}
                   {...(notification.issue
                     ? { subtitle: `${notification.issue?.identifier} ${notification.issue?.title}` }
@@ -208,18 +216,7 @@ function Notifications() {
                         <Action title="Mark as Read" icon={Icon.Checkmark} onAction={() => markAsRead(notification)} />
                       )}
 
-                      {urlKey ? (
-                        isLinearInstalled ? (
-                          <Action.Open
-                            title="Open Inbox in Linear"
-                            icon="linear.png"
-                            target={inboxUrl}
-                            application="Linear"
-                          />
-                        ) : (
-                          <Action.OpenInBrowser title="Open Inbox in Browser" url={inboxUrl} />
-                        )
-                      ) : null}
+                      {urlKey ? <OpenInLinear title="Open Inbox" url={inboxUrl} /> : null}
 
                       <ActionPanel.Section>
                         {notification.issue ? (
