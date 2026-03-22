@@ -1,5 +1,14 @@
 # Android Debug Bridge (Adb) Changelog
 
+## [Add uninstall command] - 2025-04-15
+- Add `uninstall` command to uninstall an app, disabled by default
+
+## [Add restart ADB command] - 2024-05-01
+- Add `restart adb` command, disabled by default
+
+## [Add change animation scale command] - 2024-05-01
+- Add `change animation scale` command, disabled by default
+
 ## [Get the current activity] - 2024-04-17
 - Get the current activity name and put it in your clipboard
 

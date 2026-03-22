@@ -1,20 +1,21 @@
-import { Icon, List } from "@raycast/api";
-import { Actions } from "../components/Actions";
+import { getPreferenceValues, Icon, List } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
-import { calculateDiskStorage, getOSInfo, getSerialNumber } from "./SystemUtils";
 import os from "node:os";
+
+import { Actions } from "../components/Actions";
+import { calculateDiskStorage, getOSInfo, getSerialNumber } from "./SystemUtils";
+
+const { displayModeDisk } = getPreferenceValues<ExtensionPreferences>();
 
 export default function SystemInfo() {
   return (
-    <>
-      <List.Item
-        id="info-panel"
-        title="System Info"
-        icon={Icon.Finder}
-        detail={<SystemInfoDetail />}
-        actions={<Actions />}
-      />
-    </>
+    <List.Item
+      id="info-panel"
+      title="System Info"
+      icon={Icon.Finder}
+      detail={<SystemInfoDetail />}
+      actions={<Actions />}
+    />
   );
 }
 
@@ -51,7 +52,11 @@ function SystemInfoDetail() {
               <List.Item.Detail.Metadata.Label
                 key={index}
                 title={disk.diskName}
-                text={`${disk.totalAvailableStorage} GB available of ${disk.totalSize} GB`}
+                text={
+                  displayModeDisk === "free"
+                    ? `${disk.totalAvailableStorage} GB available of ${disk.totalSize} GB`
+                    : `${disk.usedStorage} GB used of ${disk.totalSize} GB`
+                }
               />
             );
           })}

@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Detail, Icon, openExtensionPreferences } from "@raycast/api";
+import { Action, ActionPanel, Detail, Icon, List, openExtensionPreferences } from "@raycast/api";
 import { useAuth } from "../../lib/use-auth";
 import { User } from "@supabase/supabase-js";
 
@@ -9,9 +9,10 @@ export default function AuthenticatedView({
 }) {
   const { data: user, isLoading, error } = useAuth();
 
-  const markdown = error?.message.includes("Invalid login credentials")
-    ? error.message + ". Please open the preferences and try again."
-    : error?.message;
+  const errorMessage =
+    error?.code === "invalid_credentials"
+      ? error.message + ". Please open the preferences and try again."
+      : error?.message;
 
   if (user) {
     return <Component user={user} />;
@@ -23,14 +24,18 @@ export default function AuthenticatedView({
 
   if (error) {
     return (
-      <Detail
-        markdown={markdown}
-        actions={
-          <ActionPanel>
-            <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
-          </ActionPanel>
-        }
-      />
+      <List>
+        <List.EmptyView
+          title={"Problem fetching bookmarks"}
+          description={errorMessage}
+          icon={Icon.ExclamationMark}
+          actions={
+            <ActionPanel>
+              <Action title="Open Preferences" icon={Icon.Gear} onAction={() => openExtensionPreferences()} />
+            </ActionPanel>
+          }
+        />
+      </List>
     );
   }
 }

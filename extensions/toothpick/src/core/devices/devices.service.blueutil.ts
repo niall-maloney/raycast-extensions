@@ -15,7 +15,7 @@ export default class BlueutilDevicesService extends ApplescriptDevicesService {
     let blueutilDiscovered = false;
     let queuedPaths = standardBrewPaths;
 
-    const { blueutilDirectory: enforcedBlueutilDirectory } = getPreferenceValues();
+    const { blueutilDirectory: enforcedBlueutilDirectory } = getPreferenceValues<ExtensionPreferences>();
     if (enforcedBlueutilDirectory) {
       queuedPaths = [enforcedBlueutilDirectory];
     }
@@ -40,15 +40,15 @@ export default class BlueutilDevicesService extends ApplescriptDevicesService {
       const blueutilOutput = JSON.parse(
         execSync(`blueutil --paired --format json`, {
           env: this.envVars,
-        }).toString()
+        }).toString(),
       );
 
       const blueutilDevicesMacAddresses = blueutilOutput.map((entry: { address: string }) =>
-        entry.address.replaceAll("-", ":").toUpperCase()
+        entry.address.replaceAll("-", ":").toUpperCase(),
       );
 
       const devices = applescriptDevices.filter((device) =>
-        blueutilDevicesMacAddresses.includes(device.macAddress.toUpperCase())
+        blueutilDevicesMacAddresses.includes(device.macAddress.toUpperCase()),
       );
 
       return devices;

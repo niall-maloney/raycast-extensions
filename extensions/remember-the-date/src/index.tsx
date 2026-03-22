@@ -2,7 +2,7 @@ import { Form, ActionPanel, Action, showToast, Icon, Color, popToRoot } from "@r
 import { Item } from "./types";
 import { getItems, saveItems } from "./storage";
 import { nanoid } from "nanoid";
-import { refreshMenuBar, validateItem } from "./utils";
+import { refreshCommands, validateItem } from "./utils";
 import { useCachedPromise } from "@raycast/utils";
 import { getFormattedList } from "./list";
 
@@ -17,7 +17,7 @@ export default function Command() {
       popToRoot();
       await saveItems(existingItems);
       await mutate(getFormattedList());
-      await refreshMenuBar();
+      await refreshCommands();
       showToast({ title: "Success", message: "Successfully added item" });
     }
   }
@@ -33,6 +33,12 @@ export default function Command() {
       <Form.TextField id="name" title="Name" placeholder="Enter Name" />
       <Form.TextField id="subtitle" title="Subtitle" placeholder="Enter Subtitle (optional)" />
       <Form.DatePicker id="date" title="Date" />
+      <Form.Dropdown id="repeat" title="Repeat" defaultValue="none">
+        <Form.Dropdown.Item value="none" title="One-time" />
+        <Form.Dropdown.Item value="weekly" title="Weekly" />
+        <Form.Dropdown.Item value="monthly" title="Monthly" />
+        <Form.Dropdown.Item value="yearly" title="Yearly" />
+      </Form.Dropdown>
       <Form.Dropdown id="icon" title="Icon" defaultValue="">
         {Object.entries(Icon).map(([k, v]) => (
           <Form.Dropdown.Item value={v} key={k} title={k} icon={v} />

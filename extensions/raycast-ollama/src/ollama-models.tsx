@@ -1,5 +1,7 @@
-import { ModelView } from "./api/ui/ModelView";
+import { ModelView } from "./lib/ui/ModelView/main";
 
-export default function Command(): JSX.Element {
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+
+export default function Command(): React.JSX.Element {
   return ModelView();
 }

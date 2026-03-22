@@ -11,7 +11,6 @@ import {
   HarvestCompany,
 } from "./responseTypes";
 import {
-  Cache,
   environment,
   getPreferenceValues,
   launchCommand,
@@ -23,10 +22,11 @@ import {
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { NewTimeEntryDuration, NewTimeEntryStartEnd } from "./requestTypes";
 import dayjs from "dayjs";
-import { useCachedPromise } from "@raycast/utils";
-import { useEffect } from "react";
-
-const cache = new Cache();
+import duration from "dayjs/plugin/duration";
+import isToday from "dayjs/plugin/isToday";
+dayjs.extend(duration);
+dayjs.extend(isToday);
+import { useCachedPromise, useCachedState } from "@raycast/utils";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function isAxiosError(error: any): error is AxiosError {
@@ -94,21 +94,25 @@ export function useActiveClients() {
 
 async function fetchProjects() {
   let project_assignments: HarvestProjectAssignment[] = [];
-  let page = 1;
+  let pageParams = {};
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const resp = await harvestAPI<HarvestProjectAssignmentsResponse>({
       url: "/users/me/project_assignments",
-      params: { page },
+      params: { is_active: true, ...pageParams },
     });
     project_assignments = project_assignments.concat(resp.data.project_assignments);
-    if (resp.data.total_pages >= resp.data.page) break;
-    page += 1;
+    if (!resp.data.next_page) break;
+    pageParams = Object.fromEntries(new URL(resp.data.next_page).searchParams);
   }
   return project_assignments;
 }
+
 export function useMyProjects() {
-  return useCachedPromise(fetchProjects, [], { initialData: [], keepPreviousData: true });
+  const qr = useCachedPromise(fetchProjects, [], {
+    keepPreviousData: true,
+  });
+  return { ...qr, data: qr.data ?? [] };
 }
 
 export async function getMyId() {
@@ -121,47 +125,54 @@ export async function getMyId() {
   return resp.data.id;
 }
 
-export function useMyTimeEntries(from = new Date(), to = new Date()) {
-  const qr = useCachedPromise(getMyTimeEntries, [{ from, to }], { initialData: [], keepPreviousData: true });
-  useEffect(() => {
-    if (from === new Date() && to === new Date()) {
-      const running_timer = qr.data.find((o) => o.is_running);
-      if (running_timer) {
-        cache.set("running", JSON.stringify(running_timer));
-      } else {
-        cache.remove("running");
-      }
-    }
-  }, [qr.data]);
-  return qr;
+export function useMyTimeEntries(date: Date | null) {
+  // make sure that reqs within the same second are cached, to prevent rate limits
+  if (!date) date = dayjs().startOf("second").toDate();
+  date = dayjs(date).startOf("second").toDate();
+
+  const isToday = dayjs(date).isToday();
+  const [cachedEntries, setCachedEntries] = useCachedState<HarvestTimeEntry[]>("myTimeEntries-today", []);
+
+  const qr = useCachedPromise(getMyTimeEntries, [date.toISOString()], {
+    // Only use cached data as initialData when viewing today, if the cached data is also from today
+    initialData: isToday && dayjs(cachedEntries[0]?.created_at).isToday() ? cachedEntries : undefined,
+    keepPreviousData: true,
+    onData: (data) => {
+      // Only persist to cache when viewing today
+      if (isToday) setCachedEntries(data);
+    },
+  });
+
+  return { ...qr, data: qr.data ?? [] };
 }
 
-export async function getMyTimeEntries(args?: { from: Date; to: Date }): Promise<HarvestTimeEntry[]> {
-  const { from = new Date(), to = new Date() } = args ?? {};
+export async function getMyTimeEntries(date_string: string): Promise<HarvestTimeEntry[]> {
+  const date = dayjs(date_string).toDate();
+
   const id = await getMyId();
   let time_entries: HarvestTimeEntry[] = [];
-  let page = 1;
+  let pageParams = {};
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const resp = await harvestAPI<HarvestTimeEntriesResponse>({
       url: "/time_entries",
       params: {
         user_id: id,
-        from: dayjs(from).startOf("day").format(),
-        to: dayjs(to).endOf("day").format(),
-        page,
+        from: dayjs(date).startOf("day").format(),
+        to: dayjs(date).endOf("day").format(),
+        ...pageParams,
       },
     });
     time_entries = time_entries.concat(resp.data.time_entries);
-    if (resp.data.total_pages >= resp.data.page) break;
-    page += 1;
+    if (!resp.data.next_page) break;
+    pageParams = Object.fromEntries(new URL(resp.data.next_page).searchParams);
   }
   return time_entries;
 }
 
 export async function newTimeEntry(param: NewTimeEntryDuration | NewTimeEntryStartEnd, id?: string) {
   const url = id ? `/time_entries/${id}` : "/time_entries";
-  console.log({ url });
+  // console.log({ url });
   const resp = await harvestAPI<HarvestTimeEntryCreatedResponse>({ method: id ? "PATCH" : "POST", url, data: param });
   refreshMenuBar();
   return resp.data;
@@ -218,16 +229,17 @@ export function formatHours(hours: string | undefined, company: HarvestCompany |
   const { timeFormat }: Preferences = getPreferenceValues();
 
   if (timeFormat === "hours_minutes" || (timeFormat === "company" && company?.time_format === "hours_minutes")) {
-    const time = hours.split(".");
-    const hour = time[0];
-    const minute = parseFloat(`0.${time[1]}`) * 60;
-    return `${hour}:${minute < 10 ? "0" : ""}${minute.toFixed(0)}`;
+    // Round minutes properly instead of truncating (dayjs truncates by default)
+    const totalMinutes = Math.round(parseFloat(hours) * 60);
+    const hoursPart = Math.floor(totalMinutes / 60);
+    const minutesPart = totalMinutes % 60;
+    return dayjs.duration({ hours: hoursPart, minutes: minutesPart }).format("H:mm");
   }
   return hours;
 }
 
 export async function toggleTimer(): Promise<{ action: "started" | "stopped" | "failed" }> {
-  const timeEntries = await getMyTimeEntries();
+  const timeEntries = await getMyTimeEntries(new Date().toISOString());
   const runningEntry = timeEntries.find((o) => o.is_running);
   if (runningEntry) {
     // stop the running timer

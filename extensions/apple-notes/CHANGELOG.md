@@ -1,8 +1,77 @@
 # Apple Notes Changelog
 
-## [Find related notes] - 2024-04-10 
+## [Bug Fix Update] - 2026-02-26
 
-Add `Find Related Notes` feature to suggest relevant notes based on a selected note
+- Fix `get-note-content` and `update-note` timing out when Notes is not already running by using a longer AppleScript timeout.
+- Fix AI tool failures caused by UUID note IDs by resolving them to x-coredata IDs before calling AppleScript.
+- Add optional `searchText` filtering to `search-notes` so older notes can be found outside the most recent results window.
+
+## [View Random Note command] - 2025-06-30
+
+Add a new command for viewing a random note from a user's note library.
+
+## [Add Chinese Pinyin input match] - 2025-06-30
+
+When using the Chinese Pinyin input method, the note title, folder name, and snippet are now matched using Pinyin.
+
+## [Bug Fix Update] - 2025-05-22
+
+Add a preference for choosing the maximum number of notes to allow AI to use to prevent issues with running out of memory loading all notes.
+
+## [Bug Fix Update] - 2025-03-06
+
+Fix for app crashing when user has not granted disk access.
+
+## [Bug Fix Update] - 2025-02-27
+
+Fix for 'JS heap out of memory error' reported by a user in issue #17137.
+
+## [✨ AI Enhancements] - 2025-02-21
+
+## [Bug Fix Update] - 2024-11-22
+
+Fix "Create note" from empty "Search notes" view, where a new note would be created with random characters instead of value from searchbar.
+
+## [Bug Fix Update] - 2024-06-22
+
+Fix Add Text to Note hooks rendering issue.
+
+## [View Selected Note command] - 2024-06-17
+
+Add a new command allowing users to see the currently selected note from within Raycast. This can be handy if you want to open note backlinks for example.
+
+## [Change AI model for notes] - 2024-05-23
+
+Now, creating an AI note will use GPT-4o instead of GPT-4.
+
+This update also fixes a bug for users not able to create a note if the default folder isn't spelled "Notes".
+
+## [Bug Fix Update] - 2024-05-16
+
+Fix crashes caused by empty links or tags.
+
+## [Links, Backlinks, and Tags] - 2024-05-14
+
+This update enhances the Apple Notes extension with several new features:
+
+- **Note Links**: You can now see and open links directly in your Apple Notes using the new `Open Links` action.
+- **Backlinks**: The `Open Backlinks` action allows you to easily navigate through related notes and discover how your notes are connected.
+- **Tags**: Tags within your notes are now displayed and searchable, making it simpler to find your notes.
+- **Improved Detail View**: The detail view now provides more information about each note, including the folder name, last update time, links, backlinks, tags, and more.
+
+It also fixes a bug where links would not be opened for users not having macOS Sonoma.
+
+## [Add text to note] - 2024-04-26
+
+Add a new command called `Add Text to Note` allowing you to quickly append text to your notes for faster note-taking. You can also add text to a note from the `Search Notes command`.
+
+## [Use new URI scheme] - 2024-04-25
+
+Merge `Copy Mobile Note URL` into `Copy Note URL` by using the `applenotes://` scheme that works on all platforms.
+
+## [Find related notes] - 2024-04-10
+
+Add `Find Related Notes` feature to suggest relevant notes based on a selected note.
 
 ## [Refactoring] - 2024-04-08
 
@@ -80,7 +149,7 @@ There's now proper support for pinned notes, just like on the Apple Notes native
 
 ## [Open note in separate windows] - 2023-03-31
 
-- Added the function to open notes in separate windows. 
+- Added the function to open notes in separate windows.
 
 ## [Fix error handling] - 2023-02-20
 

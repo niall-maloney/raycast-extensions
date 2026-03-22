@@ -12,6 +12,8 @@ type Values = {
   hidKeyboard: boolean;
   hidMouse: boolean;
   alwaysOnTop: boolean;
+  audioCodec: string;
+  moreOptions: string;
 };
 
 export default function Command() {
@@ -24,12 +26,14 @@ export default function Command() {
       `${getScrcpyDir()}/scrcpy \
         ${values["turnScreenOff"] ? "--turn-screen-off" : ""} \
         ${values["stayAwake"] ? "--stay-awake" : ""} \
-        ${values["hidKeyboard"] ? "--hid-keyboard" : ""} \
-        ${values["hidMouse"] ? "--hid-mouse" : ""} \
+        ${values["hidKeyboard"] ? "--keyboard=uhid" : ""} \
+        ${values["hidMouse"] ? "--mouse=uhid" : ""} \
         ${values["disableAudio"] ? "--no-audio" : ""} \
         ${values["alwaysOnTop"] ? "--always-on-top" : ""} \
+        --audio-codec=${values["audioCodec"]} \
         -m ${values["size"]} \
-        -s ${serial}`,
+        -s ${serial} \
+        ${values["moreOptions"]}`,
       {
         env: {
           ...process.env,
@@ -80,9 +84,25 @@ export default function Command() {
       <Form.Checkbox id="disableAudio" defaultValue={true} label="Disable audio" storeValue />
       <Form.Checkbox id="turnScreenOff" defaultValue={true} label="Turn screen off" storeValue />
       <Form.Checkbox id="stayAwake" defaultValue={true} label="Stay awake" storeValue />
-      <Form.Checkbox id="hidKeyboard" defaultValue={true} label="HID keyboard (USB only)" storeValue />
-      <Form.Checkbox id="hidMouse" defaultValue={false} label="HID mouse (USB only)" storeValue />
+      <Form.Checkbox id="hidKeyboard" defaultValue={true} label="HID keyboard" storeValue />
+      <Form.Checkbox id="hidMouse" defaultValue={false} label="HID mouse" storeValue />
       <Form.Checkbox id="alwaysOnTop" defaultValue={false} label="Always on top" storeValue />
+      <Form.Dropdown id="audioCodec" title="Audio Codec" storeValue>
+        <Form.Dropdown.Item value="opus" title="opus" />
+        <Form.Dropdown.Item value="aac" title="aac" />
+        <Form.Dropdown.Item value="flac" title="flac" />
+        <Form.Dropdown.Item value="raw" title="raw" />
+      </Form.Dropdown>
+
+      <Form.Separator />
+
+      <Form.TextField
+        id="moreOptions"
+        defaultValue=""
+        title="More options"
+        info="For example: `--audio-bit-rate=64K --audio-buffer=40`"
+        storeValue
+      />
     </Form>
   );
 }

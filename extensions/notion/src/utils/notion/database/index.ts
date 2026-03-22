@@ -3,20 +3,48 @@ import type { BlockObjectRequest } from "@notionhq/client/build/src/api-endpoint
 import { type Form, showToast, Toast } from "@raycast/api";
 import { markdownToBlocks } from "@tryfabric/martian";
 
-import { supportedPropTypes } from "..";
+import { isMarkdownPageContent, isReadableProperty } from "..";
 import { handleError, isNotNullOrUndefined, pageMapper } from "../global";
 import { getNotionClient } from "../oauth";
+import { formValueToPropertyValue } from "../page/property";
+import { standardize } from "../standardize";
 
-import { formatDatabaseProperty } from "./property";
-import { DatabaseProperty, DatabasePropertyOption } from "./property";
+import { DatabaseProperty } from "./property";
 
-export type { DatabaseProperty, DatabasePropertyOption };
+export type { PropertyConfig } from "./property";
+export type { DatabaseProperty };
+
+async function resolveDataSourceId(notion: Client, databaseOrDataSourceId: string): Promise<string> {
+  try {
+    await notion.dataSources.retrieve({
+      data_source_id: databaseOrDataSourceId,
+    });
+    return databaseOrDataSourceId;
+  } catch {
+    // Fall through and try resolving from database metadata.
+  }
+
+  try {
+    const database = await notion.databases.retrieve({
+      database_id: databaseOrDataSourceId,
+    });
+
+    if ("data_sources" in database && database.data_sources[0]?.id) {
+      return database.data_sources[0].id;
+    }
+  } catch {
+    // Fall back to the provided id if it cannot be resolved.
+  }
+
+  return databaseOrDataSourceId;
+}
 
 export async function fetchDatabase(pageId: string, silent: boolean = true) {
   try {
     const notion = getNotionClient();
-    const page = await notion.databases.retrieve({
-      database_id: pageId,
+    const dataSourceId = await resolveDataSourceId(notion, pageId);
+    const page = await notion.dataSources.retrieve({
+      data_source_id: dataSourceId,
     });
 
     return pageMapper(page);
@@ -33,10 +61,10 @@ export async function fetchDatabases() {
         direction: "descending",
         timestamp: "last_edited_time",
       },
-      filter: { property: "object", value: "database" },
+      filter: { property: "object", value: "data_source" },
     });
     return databases.results
-      .map((x) => (x.object === "database" && "last_edited_time" in x ? x : undefined))
+      .map((x) => (x.object === "data_source" && "last_edited_time" in x ? x : undefined))
       .filter(isNotNullOrUndefined)
       .map(
         (x) =>
@@ -57,50 +85,28 @@ export async function fetchDatabases() {
 export async function fetchDatabaseProperties(databaseId: string) {
   try {
     const notion = getNotionClient();
-    const database = await notion.databases.retrieve({ database_id: databaseId });
-    const propertyNames = Object.keys(database.properties).reverse();
+    const dataSourceId = await resolveDataSourceId(notion, databaseId);
+    const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
+
+    if (!("properties" in dataSource)) return [];
+
+    const propertyNames = Object.keys(dataSource.properties).reverse();
 
     const databaseProperties: DatabaseProperty[] = [];
 
     propertyNames.forEach((name) => {
-      const property = database.properties[name];
-
-      if (supportedPropTypes.indexOf(property.type) === -1) {
-        return;
-      }
-
-      const databaseProperty = {
-        id: property.id,
-        type: property.type,
-        name: name,
-        options: [],
-      } as DatabaseProperty;
-
-      switch (property.type) {
-        case "select":
-          (databaseProperty.options as DatabasePropertyOption[]).push({
+      const property = dataSource.properties[name];
+      if (isReadableProperty(property)) {
+        if (property.type == "select")
+          property.select.options.unshift({
             id: "_select_null_",
             name: "No Selection",
+            color: "default",
+            description: "No selection",
           });
-          databaseProperty.options = (databaseProperty.options as DatabasePropertyOption[]).concat(
-            property.select.options,
-          );
-          break;
-        case "multi_select":
-          databaseProperty.options = property.multi_select.options;
-          break;
-        case "relation":
-          databaseProperty.relation_id = property.relation.database_id;
-          break;
-        case "status":
-          databaseProperty.options.push(
-            ...property.status.groups.flatMap(({ option_ids }) =>
-              option_ids.map((id) => property.status.options.find((option) => option.id == id)!),
-            ),
-          );
-      }
 
-      databaseProperties.push(databaseProperty);
+        databaseProperties.push(standardize(property, "config"));
+      }
     });
 
     return databaseProperties;
@@ -116,8 +122,9 @@ export async function queryDatabase(
 ) {
   try {
     const notion = getNotionClient();
-    const database = await notion.databases.query({
-      database_id: databaseId,
+    const dataSourceId = await resolveDataSourceId(notion, databaseId);
+    const database = await notion.dataSources.query({
+      data_source_id: dataSourceId,
       page_size: 20,
       sorts: [
         {
@@ -147,20 +154,63 @@ export async function queryDatabase(
 
 type CreateRequest = Parameters<Client["pages"]["create"]>[0];
 
-// Create database page
+async function resolveParentDatabaseId(notion: Client, databaseOrDataSourceId: string): Promise<string> {
+  try {
+    const dataSource = await notion.dataSources.retrieve({
+      data_source_id: databaseOrDataSourceId,
+    });
+
+    if ("parent" in dataSource && "database_id" in dataSource.parent) {
+      return dataSource.parent.database_id;
+    }
+  } catch {
+    // Not a valid data source id, try resolving from database metadata.
+  }
+
+  try {
+    const database = await notion.databases.retrieve({
+      database_id: databaseOrDataSourceId,
+    });
+
+    if ("data_sources" in database && database.data_sources[0]?.id) {
+      try {
+        const dataSource = await notion.dataSources.retrieve({
+          data_source_id: database.data_sources[0].id,
+        });
+        if ("parent" in dataSource && "database_id" in dataSource.parent) {
+          return dataSource.parent.database_id;
+        }
+      } catch {
+        // Fall through and use database id as a safe fallback.
+      }
+    }
+
+    if ("id" in database && database.id) {
+      return database.id;
+    }
+  } catch {
+    // Fall back to the provided id for workspaces still passing database ids.
+  }
+
+  return databaseOrDataSourceId;
+}
+
 export async function createDatabasePage(values: Form.Values) {
   try {
     const notion = getNotionClient();
     const { database, content, ...props } = values;
+    const parentDatabaseId = await resolveParentDatabaseId(notion, database);
 
     const arg: CreateRequest = {
-      parent: { database_id: database },
+      parent: { database_id: parentDatabaseId },
       properties: {},
     };
 
     if (content) {
-      // casting because converting from the `Block` type in martian to the `BlockObjectRequest` type in notion
-      arg.children = markdownToBlocks(content) as BlockObjectRequest[];
+      arg.children = isMarkdownPageContent(content)
+        ? // casting because converting from the `Block` type in martian to the `BlockObjectRequest` type in notion
+          (markdownToBlocks(content) as BlockObjectRequest[])
+        : content;
     }
 
     Object.keys(props).forEach((formId) => {
@@ -171,8 +221,8 @@ export async function createDatabasePage(values: Form.Values) {
       if (value == "_select_null_") return;
       if (!propId || !value) return;
 
-      const formatted = formatDatabaseProperty(type, value);
-      if (formatted) arg.properties[propId] = formatted;
+      const formatted = formValueToPropertyValue(type, value);
+      if (formatted) arg.properties![propId] = formatted;
     });
 
     const page = await notion.pages.create(arg);
@@ -186,15 +236,16 @@ export async function createDatabasePage(values: Form.Values) {
 export async function deleteDatabase(databaseId: string) {
   try {
     const notion = getNotionClient();
+    const dataSourceId = await resolveDataSourceId(notion, databaseId);
 
     await showToast({
       style: Toast.Style.Animated,
       title: "Deleting database",
     });
 
-    await notion.databases.update({
-      database_id: databaseId,
-      archived: true,
+    await notion.dataSources.update({
+      data_source_id: dataSourceId,
+      in_trash: true,
     });
 
     await showToast({

@@ -1,13 +1,108 @@
 import fse from "fs-extra";
-import path from "path";
-import { $ } from "zx";
-import { EspansoMatch, MultiTrigger, Replacement, NormalizedEspansoMatch, EspansoConfig } from "./types";
 import YAML from "yaml";
-$.verbose = false;
+import path from "node:path";
+import { exec, execSync } from "node:child_process";
+import type { EspansoMatch, MultiTrigger, Label, Replacement, NormalizedEspansoMatch, EspansoConfig } from "./types";
+import { getPreferenceValues } from "@raycast/api";
+import { capitalCase } from "change-case";
+
+const ACRONYMS = [
+  "AI",
+  "API",
+  "UI",
+  "UX",
+  "URL",
+  "HTML",
+  "CSS",
+  "JS",
+  "TS",
+  "SQL",
+  "REST",
+  "HTTP",
+  "HTTPS",
+  "JSON",
+  "XML",
+  "PDF",
+  "CSV",
+  "CLI",
+  "GUI",
+  "SDK",
+  "IDE",
+  "AWS",
+  "GCP",
+  "iOS",
+  "macOS",
+  "OS",
+  "RAM",
+  "ROM",
+  "CPU",
+  "GPU",
+  "USB",
+  "DVD",
+  "CD",
+  "SSH",
+  "FTP",
+  "SMTP",
+  "DNS",
+  "VPN",
+  "IP",
+  "TCP",
+  "UDP",
+  "AJAX",
+  "CRUD",
+  "JWT",
+  "OAuth",
+  "SaaS",
+  "PaaS",
+  "IaaS",
+];
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function formatCategoryName(category: string, separator: string = " · "): string {
+  if (category.includes(separator)) {
+    return category
+      .split(separator)
+      .map((part) => {
+        let formatted = capitalCase(part);
+        ACRONYMS.forEach((acronym) => {
+          const regex = new RegExp(`\\b${escapeRegex(acronym)}\\b`, "gi");
+          formatted = formatted.replace(regex, acronym);
+        });
+        return formatted;
+      })
+      .join(separator);
+  }
+
+  let formatted = capitalCase(category);
+  ACRONYMS.forEach((acronym) => {
+    const regex = new RegExp(`\\b${escapeRegex(acronym)}\\b`, "gi");
+    formatted = formatted.replace(regex, acronym);
+  });
+  return formatted;
+}
+
+export function getEspansoCmd(): string {
+  const { espansoPath } = getPreferenceValues<{ espansoPath?: string }>();
+  return espansoPath && espansoPath.trim() !== "" ? espansoPath : "espanso";
+}
+
+export function execPromise(cmd: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    exec(cmd, (_error, stdout, stderr) => {
+      if (_error) {
+        reject(new Error(stderr || _error.message));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
 
 function lastUpdatedDate(file: string) {
   const { mtime } = fse.statSync(file);
-
   return mtime.getTime();
 }
 
@@ -16,20 +111,22 @@ export function getAndSortTargetFiles(espansoMatchDir: string): { file: string; 
     .readdirSync(espansoMatchDir, { withFileTypes: true })
     .filter((dirent: fse.Dirent) => dirent.isFile() && path.extname(dirent.name).toLowerCase() === ".yml");
 
-  const matchFilesTimes = targetFiles.map((targetFile) => {
+  const matchFilesTimes = targetFiles.map((targetFile: fse.Dirent) => {
     return { file: targetFile.name, mtime: lastUpdatedDate(path.join(espansoMatchDir, targetFile.name)) };
   });
 
-  return matchFilesTimes.sort((a, b) => b.mtime - a.mtime);
+  return matchFilesTimes.sort(
+    (a: { file: string; mtime: number }, b: { file: string; mtime: number }) => b.mtime - a.mtime,
+  );
 }
-
-export function formatMatch(espansoMatch: MultiTrigger & Replacement) {
+export function formatMatch(espansoMatch: MultiTrigger & Label & Replacement) {
   const triggerList = espansoMatch.triggers.map((trigger) => `"${trigger}"`).join(", ");
+  const labelLine = espansoMatch.label ? `\n    label: "${espansoMatch.label}"` : "";
 
   return `
-  - triggers: [${triggerList}]
+  - triggers: [${triggerList}]${labelLine}
     replace: "${espansoMatch.replace}"
-    `;
+  `;
 }
 
 export function appendMatchToFile(fileContent: string, fileName: string, espansoMatchDir: string) {
@@ -41,33 +138,59 @@ export function appendMatchToFile(fileContent: string, fileName: string, espanso
 
 export function getMatches(espansoMatchDir: string, options?: { packagePath: boolean }): NormalizedEspansoMatch[] {
   const finalMatches: NormalizedEspansoMatch[] = [];
+  const loadedFiles = new Set<string>();
 
-  const matchFiles = fse
-    .readdirSync(espansoMatchDir)
-    .filter((fileName) => (options?.packagePath ? true : path.extname(fileName).toLowerCase() === ".yml")) // Filter based on options
-    .filter((fileName) => fileName !== ".DS_Store")
-    .map((fileName) => {
-      const filePath = path.join(espansoMatchDir, fileName);
-      return options?.packagePath ? path.join(filePath, "package.yml") : filePath;
-    })
-    .filter((filePath) => !options?.packagePath || fse.statSync(filePath).isFile());
+  function readDirectory(dir: string) {
+    const items = fse.readdirSync(dir, { withFileTypes: true });
+    for (const item of items) {
+      const fullPath = path.join(dir, item.name);
+      if (item.isDirectory()) {
+        if (options?.packagePath) {
+          const packageFilePath = path.join(fullPath, "package.yml");
+          if (fse.existsSync(packageFilePath) && fse.statSync(packageFilePath).isFile()) {
+            processFile(packageFilePath);
+          }
+        } else {
+          readDirectory(fullPath);
+        }
+      } else if (item.isFile() && path.extname(item.name).toLowerCase() === ".yml" && item.name !== ".DS_Store") {
+        processFile(fullPath);
+      }
+    }
+  }
 
-  for (const matchFile of matchFiles) {
-    const content = fse.readFileSync(matchFile);
+  function processFile(filePath: string) {
+    if (loadedFiles.has(filePath)) return;
+    loadedFiles.add(filePath);
+    const content = fse.readFileSync(filePath);
+    const parsed = YAML.parse(content.toString()) ?? {};
+    const matches: EspansoMatch[] = Array.isArray(parsed.matches) ? parsed.matches : [];
 
-    const { matches = [] }: { matches?: EspansoMatch[] } = YAML.parse(content.toString()) || {};
+    if (Array.isArray(parsed.imports)) {
+      for (const importPath of parsed.imports) {
+        const resolvedPath = path.resolve(path.dirname(filePath), importPath);
+        if (fse.existsSync(resolvedPath)) {
+          processFile(resolvedPath);
+        }
+      }
+    }
 
+    const relPath = path.relative(espansoMatchDir, filePath);
+    const category =
+      relPath && !relPath.startsWith("..") && relPath !== ""
+        ? relPath.split(path.sep)[0]?.replace(/\.yml$/, "")
+        : path.basename(filePath, ".yml");
     finalMatches.push(
       ...matches.flatMap((obj: EspansoMatch) => {
         if ("trigger" in obj) {
-          const { trigger, replace, label } = obj;
-          return [{ triggers: [trigger], replace, label }];
+          const { trigger, replace, form, label } = obj;
+          return [{ triggers: [trigger], replace, form, label, filePath, category }];
         } else if ("triggers" in obj) {
-          const { triggers, replace, label } = obj;
-          return triggers.map((trigger: string) => ({ triggers: [trigger], replace, label }));
+          const { triggers, replace, form, label } = obj;
+          return [{ triggers, replace, form, label, filePath, category }];
         } else if ("regex" in obj) {
-          const { regex, replace, label } = obj;
-          return [{ triggers: [regex], replace, label }];
+          const { regex, replace, form, label } = obj;
+          return [{ triggers: [regex], replace, form, label, filePath, category }];
         } else {
           return [];
         }
@@ -75,18 +198,18 @@ export function getMatches(espansoMatchDir: string, options?: { packagePath: boo
     );
   }
 
+  readDirectory(espansoMatchDir);
   return finalMatches;
 }
 
-export async function getEspansoConfig(): Promise<EspansoConfig> {
-  const configObject: EspansoConfig = {
-    config: "",
-    packages: "",
-    runtime: "",
-    match: "",
-  };
-
-  const { stdout: configString } = await $`espanso path`;
+export function getEspansoConfig(): EspansoConfig {
+  const configObject: EspansoConfig = { config: "", packages: "", runtime: "", match: "" };
+  let configString = "";
+  try {
+    configString = execSync(`${getEspansoCmd()} path`, { encoding: "utf-8" });
+  } catch (error) {
+    throw new Error(`Failed to run 'espanso path': ${error}`);
+  }
 
   configString.split("\n").forEach((item) => {
     const [key, value] = item.split(":");
@@ -99,7 +222,6 @@ export async function getEspansoConfig(): Promise<EspansoConfig> {
   });
 
   configObject.match = path.join(configObject.config, "match");
-
   return configObject;
 }
 
@@ -108,9 +230,9 @@ export const sortMatches = (matches: NormalizedEspansoMatch[]): NormalizedEspans
     if (a.label && b.label) {
       return a.label.localeCompare(b.label);
     } else if (a.label) {
-      return -1; // a has label, b does not
+      return -1;
     } else if (b.label) {
-      return 1; // b has label, a does not
+      return 1;
     } else {
       return a.triggers[0].localeCompare(b.triggers[0]);
     }

@@ -1,5 +1,59 @@
 # GIF Search Changelog
 
+## [Add Klipy support] - 2026-02-05
+
+- Add Klipy support
+
+## [Faster Thumbnails] - 2025-12-17
+
+- Speed up loading of thumbnails in large grid items
+
+## [Enhancement] - 2025-09-29
+
+- Add a new action to paste a GIF into the front-most application
+
+## [Fix] - 2025-07-10
+
+- Expanded Tenor URL detection in ⁠getServiceFromUrl.ts to ensure GIFs from ⁠tenor.com, ⁠c.tenor.com, and ⁠media.tenor.com are added to the "Recent" list in GIF Search.
+
+## [Refactor] - 2025-04-14
+
+- Refactored `copyFileToClipboard` to use Raycast APIs instead of relying on AppleScript.
+
+## [Locale Support] - 2025-03-17
+
+- Added locale support for Giphy and Tenor, configurable via Preferences
+- Updated Raycast packages to latest versions
+
+## [Enhancement] - 2024-11-25
+
+- Update README with FAQs
+
+## [Add download location preference] - 2024-11-17
+
+- Adds a new preference to define the download location of GIFs
+
+## [Hide Filename on Copy or Download] - 2024-11-04
+
+- Adds a new preference to hide the original GIF filename when copying or downloading GIFs
+
+## [Fix Recent GIFs can't be add to favorites] - 2024-10-08
+
+- Fixes a bug where recent GIFs couldn't be added to favorites
+
+## [Add 'Paste GIF Markdown' action] - 2024-09-06
+
+- Added a new action to paste a Markdown-formatted link to the GIF into the front-most application
+
+## [Fix favorites GIFS can't be removed] - 2024-09-02
+
+- Fixes a bug where favorited GIFs couldn't be removed from the favorites list
+
+## [Better Results] - 2024-04-19
+
+- The extension now uses GIPHY Pro and Tenor v2 to have better GIF results
+- The codebase has largely been revamped to make it easier to maintain
+
 ## [Use native pagination] - 2024-03-12
 
 - Switched to using native pagination for better scrolling experience
@@ -14,9 +68,9 @@
 
 - Added extension keywords, making it easier to find in the store.
 
-## [Fix GIFS downloaded from Giphy at lower quality] - 2024-12-01
+## [Fix GIFS downloaded from GIPHY at lower quality] - 2024-12-01
 
-- Fixes a bug where GIFs downloaded from Giphy were of a lower quality than the original
+- Fixes a bug where GIFs downloaded from GIPHY were of a lower quality than the original
 
 ## [Infinite Scroll] - 2023-12-02
 
@@ -30,7 +84,7 @@
 
 - Remove the list layout to simplify both the extension's user experience and developer experience.
 - Add "frecency" sorting to recents and favorites so that often-used GIFs come first.
-- Add support for Giphy Clips
+- Add support for GIPHY Clips
 - Add download GIF action
 - Add action to load more GIFs
 
@@ -94,7 +148,7 @@
 
 ## [Improved Experience] - 2022-03-22
 
-- Giphy and Tenor keys no longer required, downloads shared keys by default
+- GIPHY and Tenor keys no longer required, downloads shared keys by default
 
 ## [New Customizations & New GIF Search Engine] - 2022-03-21
 

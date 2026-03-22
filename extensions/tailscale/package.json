@@ -12,7 +12,10 @@
     "kradalby",
     "itsmingjie",
     "erics118",
-    "brandenw"
+    "brandenw",
+    "j3lte",
+    "itsmatteomanf",
+    "MatteoGauthier"
   ],
   "categories": [
     "Developer Tools",
@@ -55,7 +58,18 @@
       "title": "Admin Console",
       "subtitle": "Tailscale",
       "description": "Open the Tailscale Admin Console",
-      "mode": "no-view"
+      "mode": "no-view",
+      "preferences": [
+        {
+          "name": "adminConsoleURL",
+          "type": "textfield",
+          "required": false,
+          "title": "Admin Console URL",
+          "description": "URL to the Tailscale Admin Console. Intended to be used with self-hosted Tailscale installations.",
+          "default": "https://login.tailscale.com/admin/machines",
+          "placeholder": "https://login.tailscale.com/admin/machines"
+        }
+      ]
     },
     {
       "name": "status",
@@ -63,7 +77,34 @@
       "subtitle": "Tailscale",
       "description": "Show Tailscale's connection status.",
       "mode": "no-view",
-      "interval": "30s"
+      "interval": "30s",
+      "preferences": [
+        {
+          "name": "showHostname",
+          "type": "checkbox",
+          "required": false,
+          "title": "Status Display",
+          "label": "Show Hostname",
+          "description": "Show the device hostname in the status bar",
+          "default": true
+        },
+        {
+          "name": "showIP",
+          "type": "checkbox",
+          "required": false,
+          "label": "Show IP Address",
+          "description": "Show the Tailscale IP address in the status bar",
+          "default": true
+        },
+        {
+          "name": "showTailnetName",
+          "type": "checkbox",
+          "required": false,
+          "label": "Show Tailnet Name",
+          "description": "Show the tailnet name in the status bar",
+          "default": true
+        }
+      ]
     },
     {
       "name": "connect",
@@ -78,6 +119,20 @@
       "subtitle": "Tailscale",
       "description": "Tailscale down",
       "mode": "no-view"
+    },
+    {
+      "name": "toggle",
+      "title": "Toggle Connection",
+      "subtitle": "Tailscale",
+      "description": "Toggle Tailscale connection on/off",
+      "mode": "no-view"
+    },
+    {
+      "name": "netcheck",
+      "title": "Netcheck",
+      "subtitle": "Tailscale",
+      "description": "Tailscale netcheck",
+      "mode": "view"
     }
   ],
   "preferences": [
@@ -97,21 +152,27 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^1.61.2"
+    "@raycast/api": "^1.104.5",
+    "@raycast/utils": "^1.17.0",
+    "country-emoji": "^1.5.6"
   },
   "devDependencies": {
-    "@raycast/eslint-config": "^1.0.8",
-    "@types/node": "18.18.4",
-    "@types/react": "18.2.37",
-    "eslint": "^8.53.0",
-    "prettier": "^3.0.3",
-    "typescript": "^5.2.2"
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
   },
   "scripts": {
-    "build": "ray build -e dist",
+    "build": "ray build",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
+    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
     "publish": "npx @raycast/api@latest publish"
-  }
+  },
+  "platforms": [
+    "macOS"
+  ]
 }

@@ -1,5 +1,10 @@
-import { ChatView } from "./api/ui/ChatView";
+import { getPreferenceValues } from "@raycast/api";
+import { Preferences } from "./lib/types";
+import { ChatView } from "./lib/ui/ChatView/main";
 
-export default function Command(): JSX.Element {
+const p = getPreferenceValues<Preferences>();
+if (!p.ollamaCertificateValidation) process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+
+export default function Command(): React.JSX.Element {
   return <ChatView />;
 }

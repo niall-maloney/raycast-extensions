@@ -35,7 +35,8 @@ export interface Model {
   name: string;
   prompt: string;
   option: string;
-  temperature: number;
+  temperature: string;
+  max_tokens: string;
   pinned: boolean;
 }
 
@@ -67,6 +68,7 @@ export type QuestionHook = BaseHook<string> & { update: PromiseFunctionWithOneAr
 export type ModelHook = Hook<Model> & {
   update: PromiseFunctionWithOneArg<Model>;
   option: Model["option"][];
+  availableModels: Array<{ id: string; display_name: string }>;
 };
 
 export interface ChatHook {
@@ -78,6 +80,7 @@ export interface ChatHook {
   setSelectedChatId: Set<string | null>;
   ask: PromiseFunctionWithTwoArg<string, Model>;
   clear: PromiseFunctionNoArg;
+  streamData: Chat | undefined;
 }
 
 export interface ChangeModelProp {
@@ -97,4 +100,9 @@ export interface ChatViewProps extends ChangeModelProp {
   model: Model;
   setConversation: Set<Conversation>;
   use: { chats: ChatHook };
+}
+
+export interface CSVPrompt {
+  name: string;
+  prompt: string;
 }

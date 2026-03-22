@@ -1,6 +1,27 @@
 # Bilibili Changelog
 
-## [New Feature] - 2023-12-11
+## [Windows support] -2026-01-23
+
+- Support Windows platform
+
+## [Fix Bug] - 2025-09-20
+
+- Fix the issue where the app would crash when opening dynamic post with the description is null.
+
+## [Fix Bug] - 2024-10-10
+
+- Add HUD tips to notifications when user is not logged in.
+
+## [New Feature] - 2024-09-10
+
+- Support search videos
+
+## [New Feature] - 2023-12-30
+
+- Support add watch later reminder into the reminder.app
+- Show all images on the first screen
+
+## [New Feature] - 2023-11-13
 
 - Support AI summary video
 

@@ -1,5 +1,34 @@
 # Wikipedia Changelog
 
+## [Language improvements] - 2025-05-30
+- Fix open article in another language
+- Add the ability to delete recent articles
+
+## [✨ AI Enhancements] - 2025-02-21
+
+## [Add languages] - 2025-01-02
+
+- Add `Finnish`, `Swedish` and `Norwegian` languages
+- Fix spelling for `Ukrainian`
+
+## [Fixes] - 2024-10-25
+
+- Fix page-item crash when the URL is `undefined`
+
+## [Add languages] - 2024-08-24
+
+- Add `Catalan`, `Basque`, `Galician`, `Occitan`, `Aragonese` and `Asturian` languages
+
+## [Add Danish language] - 2024-07-25
+
+- Add `Danish` language
+
+## [Contributor maintenance] - 2024-07-04
+
+- Move @JonathanWbn to list of past contributors
+
+## [Add simple english version] - 2024-05-31
+
 ## [Flag update] - 2024-04-19
 
 - Update flag emoji for the `Dutch` language
@@ -66,7 +95,7 @@ Add categories and screenshots for the store
 - Fix page open issues caused by unescaped page title characters
 - Use native `open` Raycast utility
 
-## [Simplified Extension] - 2022-20-01
+## [Simplified Extension] - 2022-01-20
 
 Remove page preview from the extension
 

@@ -1,9 +1,10 @@
 import { List, ActionPanel, Action, Icon, confirmAlert, Alert } from "@raycast/api";
-import { Workspace, Client, deleteClient, archiveClient, restoreClient } from "../api";
-import ClientForm from "./ClientForm";
-import { withToast, Verb } from "../helpers/withToast";
-import Shortcut from "../helpers/shortcuts";
-import { canModifyProjectIn } from "../helpers/privileges";
+
+import { Workspace, Client, deleteClient, archiveClient, restoreClient } from "@/api";
+import ClientForm from "@/components/ClientForm";
+import { canModifyProjectIn } from "@/helpers/privileges";
+import Shortcut from "@/helpers/shortcuts";
+import { withToast, Verb } from "@/helpers/withToast";
 
 interface ClientListItemProps {
   workspace: Workspace;
@@ -55,7 +56,7 @@ export default function ClientListItem({ workspace, client, revalidateClients, S
               />
               {workspace.business_ws &&
                 (client.archived ? (
-                  <ActionPanel.Submenu title="Restore Client..." icon={Icon.Undo} shortcut={Shortcut.Archive}>
+                  <ActionPanel.Submenu title="Restore Client…" icon={Icon.Undo} shortcut={Shortcut.Archive}>
                     <Action
                       title={`Restore Client and Projects`}
                       onAction={() =>

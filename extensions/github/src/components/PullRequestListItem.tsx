@@ -1,4 +1,4 @@
-import { Action, Icon, List } from "@raycast/api";
+import { Action, Color, Icon, List } from "@raycast/api";
 import { MutatePromise } from "@raycast/utils";
 import { format } from "date-fns";
 import { useMemo } from "react";
@@ -15,6 +15,7 @@ import { useMyPullRequests } from "../hooks/useMyPullRequests";
 
 import PullRequestActions from "./PullRequestActions";
 import PullRequestDetail from "./PullRequestDetail";
+import { SortActionProps } from "./SortAction";
 
 type PullRequestListItemProps = {
   pullRequest: PullRequestFieldsFragment;
@@ -22,7 +23,13 @@ type PullRequestListItemProps = {
   mutateList?: MutatePromise<PullRequestFieldsFragment[] | undefined> | ReturnType<typeof useMyPullRequests>["mutate"];
 };
 
-export default function PullRequestListItem({ pullRequest, viewer, mutateList }: PullRequestListItemProps) {
+export default function PullRequestListItem({
+  pullRequest,
+  viewer,
+  mutateList,
+  sortQuery,
+  setSortQuery,
+}: PullRequestListItemProps & SortActionProps) {
   const updatedAt = new Date(pullRequest.updatedAt);
 
   const numberOfComments = useMemo(() => getNumberOfComments(pullRequest), []);
@@ -52,6 +59,10 @@ export default function PullRequestListItem({ pullRequest, viewer, mutateList }:
     });
   }
 
+  if (pullRequest.repository.autoMergeAllowed && pullRequest.autoMergeRequest) {
+    accessories.unshift({ tag: { value: "Auto-merge", color: Color.Yellow } });
+  }
+
   if (pullRequest.commits.nodes) {
     const checkState = pullRequest.commits.nodes[0]?.commit.statusCheckRollup?.state;
     const checkStateAccessory = checkState ? getCheckStateAccessory(checkState) : null;
@@ -76,7 +87,7 @@ export default function PullRequestListItem({ pullRequest, viewer, mutateList }:
       keywords={keywords}
       accessories={accessories}
       actions={
-        <PullRequestActions pullRequest={pullRequest} viewer={viewer} mutateList={mutateList}>
+        <PullRequestActions {...{ pullRequest, viewer, mutateList, sortQuery, setSortQuery }}>
           <Action.Push
             title="Show Details"
             icon={Icon.Sidebar}

@@ -1,4 +1,5 @@
 import { Action } from "@raycast/api";
+
 import { isLinearInstalled } from "../helpers/isLinearInstalled";
 
 type OpenInLinearProps = {
@@ -10,7 +11,7 @@ export default function OpenInLinear({ title, url, ...props }: OpenInLinearProps
   return isLinearInstalled ? (
     <Action.Open
       title={`${title ? title : "Open"} in Linear`}
-      icon="linear.png"
+      icon="linear-app-icon.png"
       target={url}
       application="Linear"
       {...props}

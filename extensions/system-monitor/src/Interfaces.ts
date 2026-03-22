@@ -37,6 +37,17 @@ export interface PowerMonitorState {
   timeOnBattery: string;
 }
 
+export interface BatteryDataInterface {
+  condition: string;
+  cycleCount: string;
+  batteryLevel: string;
+  fullyCharged: boolean;
+  isCharging: boolean;
+  maximumCapacity: string;
+  temperature: string;
+  timeRemaining: number;
+}
+
 export interface MemoryInterface {
   memTotal: number;
   memUsed: number;
@@ -46,4 +57,5 @@ export interface DiskInterface {
   diskName: string;
   totalSize: string;
   totalAvailableStorage: string;
+  usedStorage: string;
 }

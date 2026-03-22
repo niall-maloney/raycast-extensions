@@ -1,23 +1,27 @@
 import fetch from "node-fetch";
 import { buildBingImageURL, buildBingWallpapersURL, getPictureName } from "./utils/bing-wallpaper-utils";
 import {
+  autoDownloadPictures,
   getDownloadedBingWallpapers,
-  setDownloadedWallpaperWithoutToast,
-  setWallpaperWithoutToast,
+  setLocalWallpaper,
+  setOnlineWallpaper,
 } from "./utils/common-utils";
-import { environment, getPreferenceValues, LaunchType, showHUD } from "@raycast/api";
+import { environment, LaunchType, showHUD } from "@raycast/api";
 import { BingResponseData } from "./types/types";
-import { Preferences } from "./types/preferences";
+import { autoDownload, downloadSize, includeDownloadedWallpapers } from "./types/preferences";
+import { canRefresh, recordRefresh } from "./utils/refresh-record";
 
 export default async () => {
   if (environment.launchType === LaunchType.UserInitiated) {
     await showHUD("Downloading and setting wallpaper...");
   }
-  await getRandomWallpaper();
+  if (canRefresh()) {
+    recordRefresh();
+    await getRandomWallpaper();
+  }
 };
 
 export const getRandomWallpaper = async () => {
-  const { includeDownloadedWallpapers } = getPreferenceValues<Preferences>();
   const firstResponse = await fetch(buildBingWallpapersURL(0, 8)).catch(async (e) => {
     console.error(e);
     return undefined;
@@ -35,6 +39,10 @@ export const getRandomWallpaper = async () => {
     secondResponseDataImages.shift();
     const bingWallpaperHD = firstResponseDataImages.concat(secondResponseDataImages);
 
+    if (autoDownload) {
+      await autoDownloadPictures(downloadSize, bingWallpaperHD);
+    }
+
     if (includeDownloadedWallpapers) {
       const downloadedBingWallpaper = getDownloadedBingWallpapers();
 
@@ -42,13 +50,14 @@ export const getRandomWallpaper = async () => {
         const randomImageIndex = Math.floor(Math.random() * (bingWallpaperHD.length + downloadedBingWallpaper.length));
         if (randomImageIndex < bingWallpaperHD.length) {
           const randomImage = bingWallpaperHD[randomImageIndex];
-          await setWallpaperWithoutToast(
+          await setOnlineWallpaper(
             getPictureName(randomImage.url) + "-" + randomImage.startdate,
             buildBingImageURL(randomImage.url, "raw"),
+            false,
           );
         } else {
           const randomImage = downloadedBingWallpaper[randomImageIndex - bingWallpaperHD.length];
-          await setDownloadedWallpaperWithoutToast(randomImage.path);
+          await setLocalWallpaper(randomImage.path, false);
         }
       } else {
         await showHUD("No wallpaper found.");
@@ -56,9 +65,10 @@ export const getRandomWallpaper = async () => {
     } else {
       const randomImageIndex = Math.floor(Math.random() * bingWallpaperHD.length);
       const randomImage = bingWallpaperHD[randomImageIndex];
-      await setWallpaperWithoutToast(
+      await setOnlineWallpaper(
         getPictureName(randomImage.url) + "-" + randomImage.startdate,
         buildBingImageURL(randomImage.url, "raw"),
+        false,
       );
     }
   } catch (e) {

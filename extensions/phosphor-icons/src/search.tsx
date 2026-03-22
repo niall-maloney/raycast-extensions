@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { IconEntry, icons } from "@phosphor-icons/core";
 import { getPreferenceValues } from "@raycast/api";
-import difference from "lodash/difference";
 import IconsGrid from "./components/IconsGrid";
 import IconsList from "./components/IconsList";
 
@@ -12,7 +11,7 @@ import IconsList from "./components/IconsList";
 const allIcons = icons as unknown as IconEntry[];
 
 const SearchIconsCommand = () => {
-  const { view } = getPreferenceValues<{ view: "grid" | "list" }>();
+  const { view } = getPreferenceValues<Preferences>();
   const [weight, setWeight] = useState("regular");
   const [search, setSearch] = useState("");
 
@@ -24,10 +23,8 @@ const SearchIconsCommand = () => {
     if (queries.length === 0) return allIcons;
 
     return allIcons.filter((i) => {
-      const searchValues = [...i.tags, ...i.categories].map((s) => s.toLowerCase());
-      return (
-        difference(queries, searchValues).length === 0 || queries.find((q) => i.pascal_name.toLowerCase().includes(q))
-      );
+      const searchValues = [...i.tags, ...i.categories, i.name, i.pascal_name].map((s) => s.toLowerCase());
+      return queries.find((q) => searchValues.find((v) => v.includes(q)));
     });
   }, [search]);
 

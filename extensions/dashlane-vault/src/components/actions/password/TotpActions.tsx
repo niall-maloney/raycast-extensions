@@ -1,6 +1,9 @@
 import { Action, Clipboard, Icon, Toast, showToast } from "@raycast/api";
+import { showFailureToast } from "@raycast/utils";
 
 import { useCurrentApplicationContext } from "@/context/current-application";
+import { usePasswordContext } from "@/context/passwords";
+import { getErrorAction } from "@/helper/error";
 import { getOtpSecret } from "@/lib/dcli";
 import { VaultCredential } from "@/types/dcli";
 
@@ -10,8 +13,16 @@ type Props = {
 
 export default function TotpActions({ item }: Props) {
   const { currentApplication } = useCurrentApplicationContext();
-  const copyTotp = () => copy(item.id);
-  const pasteTotp = () => paste(item.id);
+  const { visitItem } = usePasswordContext();
+
+  const copyTotp = () => {
+    copy(item.id);
+    visitItem(item);
+  };
+  const pasteTotp = () => {
+    paste(item.id);
+    visitItem(item);
+  };
   const hasTotp = item.otpSecret !== undefined;
 
   if (!hasTotp) return null;
@@ -39,18 +50,20 @@ async function copy(id: string) {
     toast.message = `Expires in ${expireIn} seconds`;
     toast.style = Toast.Style.Success;
   } catch (error) {
-    toast.message = "Failed to get TOTP";
-    toast.style = Toast.Style.Failure;
+    await showFailureToast(error, {
+      primaryAction: getErrorAction(error),
+    });
   }
 }
 
 async function paste(id: string) {
-  const toast = await showToast(Toast.Style.Animated, "Getting TOTP code");
+  await showToast(Toast.Style.Animated, "Getting TOTP code");
   try {
     const { otp } = await getOtpSecret(id);
     await Clipboard.paste(otp);
   } catch (error) {
-    toast.message = "Failed to get TOTP";
-    toast.style = Toast.Style.Failure;
+    await showFailureToast(error, {
+      primaryAction: getErrorAction(error),
+    });
   }
 }

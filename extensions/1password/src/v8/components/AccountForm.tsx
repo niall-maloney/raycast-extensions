@@ -1,23 +1,21 @@
 import { Action, ActionPanel, Clipboard, Form, Icon, showToast, Toast } from "@raycast/api";
+import { useState } from "react";
 
-import { Items } from "./Items";
+import { signIn, useAccounts } from "../utils";
 import { Guide } from "./Guide";
-import { op, useAccounts } from "../utils";
-import { useCachedState } from "@raycast/utils";
+import { Items } from "./Items";
 
-export function AccountForm() {
-  const [hasAccount, setHasAccount] = useCachedState<boolean | undefined>("@account", false);
+export function AccountForm({ reset = false }: { reset?: boolean }) {
+  const [hasAccount, setHasAccount] = useState<boolean>(false);
   const { data, error, isLoading } = useAccounts();
 
   if (error) return <Guide />;
-  if (hasAccount) return <Items />;
+  if (!reset || hasAccount) return <Items />;
   return (
     <Form
-      isLoading={isLoading}
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Sign In"
             icon={Icon.Key}
             onSubmit={async (values) => {
               const toast = await showToast({
@@ -26,7 +24,7 @@ export function AccountForm() {
               });
 
               try {
-                op(["signin", "--account", values.account]);
+                signIn(`--account ${values.account}`);
                 setHasAccount(true);
 
                 toast.style = Toast.Style.Success;
@@ -37,20 +35,22 @@ export function AccountForm() {
                 if (error instanceof Error) {
                   toast.message = error.message;
                   toast.primaryAction = {
-                    title: "Copy logs",
                     onAction: async (toast) => {
                       await Clipboard.copy((error as Error).message);
                       toast.hide();
                     },
+                    title: "Copy logs",
                   };
                 }
               }
             }}
+            title="Sign in"
           />
         </ActionPanel>
       }
+      isLoading={isLoading}
     >
-      <Form.Dropdown id="account" title="Account" autoFocus>
+      <Form.Dropdown autoFocus id="account" title="Account">
         {(data || []).map((account) => (
           <Form.Dropdown.Item
             key={account.account_uuid}

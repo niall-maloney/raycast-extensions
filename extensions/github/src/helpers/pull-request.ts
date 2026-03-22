@@ -4,11 +4,27 @@ import { uniqBy } from "lodash";
 import {
   PullRequestDetailsFieldsFragment,
   PullRequestFieldsFragment,
+  PullRequestMergeMethod,
   PullRequestReviewDecision,
   StatusState,
 } from "../generated/graphql";
 
 import { getGitHubUser } from "./users";
+
+export function getMergeMethodTitle(method: PullRequestMergeMethod): string {
+  switch (method) {
+    case PullRequestMergeMethod.Merge:
+      return "Create Merge Commit";
+    case PullRequestMergeMethod.Squash:
+      return "Squash and Merge";
+    case PullRequestMergeMethod.Rebase:
+      return "Rebase and Merge";
+    default: {
+      const _exhaustive: never = method;
+      throw new Error(`Unknown merge method: ${_exhaustive}`);
+    }
+  }
+}
 
 export function getPullRequestStatus(pullRequest: PullRequestFieldsFragment | PullRequestDetailsFieldsFragment) {
   if (pullRequest.merged) {
@@ -32,6 +48,14 @@ export function getPullRequestStatus(pullRequest: PullRequestFieldsFragment | Pu
       icon: { source: "pull-request-draft.svg", tintColor: Color.SecondaryText },
       text: "Draft",
       color: Color.SecondaryText,
+    };
+  }
+
+  if (pullRequest.isInMergeQueue) {
+    return {
+      icon: { source: "pull-request-merge-queue.svg", tintColor: Color.Orange },
+      text: "In Merge Queue",
+      color: Color.Orange,
     };
   }
 
@@ -131,3 +155,22 @@ export function getReviewDecision(reviewDecision?: PullRequestReviewDecision | n
       return null;
   }
 }
+
+export const PR_SORT_TYPES_TO_QUERIES = [
+  { title: "Newest", value: "sort:created-desc" },
+  { title: "Oldest", value: "sort:created-asc" },
+  { title: "Most Commented", value: "sort:comments-desc" },
+  { title: "Least Commented", value: "sort:comments-asc" },
+  { title: "Recently Updated", value: "sort:updated-desc" },
+  { title: "Least Recently Updated", value: "sort:updated-asc" },
+  { title: "Best Match", value: "sort:relevance-desc" },
+  { title: "👍", value: "sort:reactions-+1-desc" },
+  { title: "👎", value: "sort:reactions--1-desc" },
+  { title: "😄", value: "sort:reactions-smile-desc" },
+  { title: "🎉", value: "sort:reactions-tada-desc" },
+  { title: "🙁", value: "sort:reactions-thinking_face-desc" },
+  { title: "❤️", value: "sort:reactions-heart-desc" },
+  { title: "🚀", value: "sort:reactions-rocket-desc" },
+  { title: "👀", value: "sort:reactions-eyes-desc" },
+];
+export const PR_DEFAULT_SORT_QUERY = "sort:updated-desc";
