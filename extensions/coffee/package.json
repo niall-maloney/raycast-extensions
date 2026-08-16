@@ -13,6 +13,13 @@
     "xilopaint",
     "ridemountainpig",
     "zakj",
+    "Katsuba",
+    "alexi.build",
+    "mbuvarp",
+    "frederik_obe",
+    "bsradcliffe"
+  ],
+  "pastContributors": [
     "Visual-Studio-Coder"
   ],
   "platforms": [
@@ -38,7 +45,7 @@
       "name": "caffeinateWhile",
       "title": "Caffeinate While",
       "subtitle": "Coffee",
-      "description": "Prevent your Mac from sleeping while an certain app is running",
+      "description": "Prevent your Mac from sleeping while a certain app is running",
       "mode": "view"
     },
     {
@@ -98,14 +105,14 @@
       "name": "caffeinateUntil",
       "title": "Caffeinate Until",
       "subtitle": "Coffee",
-      "description": "Prevent your Mac from sleeping until a certain time",
-      "mode": "no-view",
+      "description": "Prevent your Mac from sleeping until a certain time. Type one like 5pm, or leave the field empty to pick a date and time.",
+      "mode": "view",
       "arguments": [
         {
           "name": "time",
-          "placeholder": "Time",
+          "placeholder": "Time (e.g. 5pm)",
           "type": "text",
-          "required": true
+          "required": false
         }
       ]
     },
@@ -153,6 +160,21 @@
       "name": "caffeinate-while-app-is-running",
       "title": "Caffeinate While App Is Running",
       "description": "While an app is running, turn on caffeination."
+    },
+    {
+      "name": "caffeinate-until",
+      "title": "Caffeinate Until",
+      "description": "Keep the Mac awake until a specific future date and time."
+    },
+    {
+      "name": "list-caffeination-schedules",
+      "title": "List Caffeination Schedules",
+      "description": "List the recurring caffeination schedules configured for the week."
+    },
+    {
+      "name": "manage-caffeination-schedule",
+      "title": "Manage Caffeination Schedule",
+      "description": "Pause, resume, or delete a recurring caffeination schedule for a day."
     }
   ],
   "preferences": [
@@ -206,6 +228,15 @@
           "value": "paper-cup"
         }
       ]
+    },
+    {
+      "name": "startCaffeinateOnLaunch",
+      "description": "Automatically keep your Mac awake (indefinitely) when Raycast starts. Requires the Caffeinate Status command (15 s interval) or the Caffeinate Status Menu Bar command (1 m interval) to be enabled.",
+      "type": "checkbox",
+      "required": false,
+      "default": false,
+      "title": "Launch",
+      "label": "Start caffeination when Raycast starts"
     }
   ],
   "dependencies": {

@@ -11,14 +11,18 @@ import {
   TAG_HUMAN_COLOR,
 } from "../constants";
 import { useTranslation } from "../hooks/useTranslation";
-import { Bookmark, Config } from "../types";
+import { Bookmark, Config, List as BookmarkListType } from "../types";
+import { markdownImage } from "../utils/markdown";
 import { getScreenshot } from "../utils/screenshot";
+import { markToastFailed, toErrorMessage } from "../utils/toast";
 import { BookmarkDetail } from "./BookmarkDetail";
 import { BookmarkEdit } from "./BookmarkEdit";
 import { NoteEdit } from "./NoteEdit";
+import { AddToListSubmenu } from "./AddToListSubmenu";
 
 const log = logger.child("[BookmarkItem]");
 const { Metadata } = List.Item.Detail;
+
 interface BookmarkItemProps {
   bookmark: Bookmark;
   config: Config;
@@ -26,6 +30,9 @@ interface BookmarkItemProps {
   onCleanCache?: () => void;
   onVisit?: (bookmark: Bookmark) => void;
   isSelected?: boolean;
+  /** Supplied by BookmarkList so the Add to List submenu costs one request per view, not per row. */
+  lists?: BookmarkListType[];
+  isLoadingLists?: boolean;
 }
 
 function getPreviewAssetIds(bookmark: Bookmark): { screenshotId?: string; imageAssetId?: string } {
@@ -59,7 +66,7 @@ function useAuthenticatedAssetUrl(assetId: string | undefined, enabled: boolean)
           setUrl(imageUrl);
         }
       } catch (error) {
-        log.error("Failed to get authenticated image", { assetId, error });
+        log.error("Failed to get authenticated image", { assetId, error: toErrorMessage(error) });
       }
     })();
 
@@ -118,8 +125,7 @@ function useBookmarkHandlers({
         }
       } catch (error) {
         log.error(`Bookmark action '${action}' failed`, error);
-        toast.style = Toast.Style.Failure;
-        toast.message = String(error);
+        markToastFailed(toast, toast.title, error);
         if (action !== "delete") {
           await fetchLatestBookmark();
         }
@@ -293,6 +299,8 @@ function BookmarkActions({
   images,
   t,
   onVisit,
+  lists,
+  isLoadingLists,
 }: {
   bookmark: Bookmark;
   config: Config;
@@ -302,6 +310,8 @@ function BookmarkActions({
   images: ReturnType<typeof useBookmarkImages>;
   t: (key: string) => string;
   onVisit?: (bookmark: Bookmark) => void;
+  lists?: BookmarkListType[];
+  isLoadingLists?: boolean;
 }) {
   const isNote = bookmark.content.type === "text";
   const editTitle = isNote ? t("notes.actions.edit") : t("bookmark.actions.edit");
@@ -313,7 +323,7 @@ function BookmarkActions({
     const pushDetailAction = (
       <Action.Push
         icon={Icon.Sidebar}
-        target={<BookmarkDetail bookmark={bookmark} onRefresh={onRefresh} />}
+        target={<BookmarkDetail bookmark={bookmark} onRefresh={onRefresh} lists={lists} />}
         title={viewDetailTitle}
       />
     );
@@ -403,7 +413,7 @@ function BookmarkActions({
         {mainAction.props.title !== viewDetailTitle && (
           <Action.Push
             icon={Icon.Sidebar}
-            target={<BookmarkDetail bookmark={bookmark} onRefresh={onRefresh} />}
+            target={<BookmarkDetail bookmark={bookmark} onRefresh={onRefresh} lists={lists} />}
             title={viewDetailTitle}
           />
         )}
@@ -459,6 +469,9 @@ function BookmarkActions({
             />
           </>
         )}
+        {lists && lists.length > 0 && (
+          <AddToListSubmenu bookmarkId={bookmark.id} lists={lists} isLoading={isLoadingLists} />
+        )}
         <Action
           title={bookmark.favourited ? t("bookmark.actions.unfavorite") : t("bookmark.actions.favorite")}
           onAction={() => handlers.handleUpdate({ favourited: !bookmark.favourited })}
@@ -486,22 +499,27 @@ function BookmarkActions({
           />
         )}
       </ActionPanel.Section>
-      <ActionPanel.Section title={t("bookmarkItem.actions.getBrowserExtension")}>
-        <Action.OpenInBrowser
-          title={t("bookmarkItem.actions.installChromeExtension")}
-          url="https://chromewebstore.google.com/detail/karakeep/kgcjekpmcjjogibpjebkhaanilehneje"
-          icon={Icon.Globe}
-        />
-        <Action.OpenInBrowser
-          title={t("bookmarkItem.actions.installFirefoxAddon")}
-          url="https://addons.mozilla.org/en-US/firefox/addon/karakeep/"
-          icon={Icon.Globe}
-        />
-        <Action.OpenInBrowser
-          title={t("bookmarkItem.actions.installSafariExtension")}
-          url="https://apps.apple.com/us/app/karakeeper-bookmarker/id6746722790"
-          icon={Icon.Globe}
-        />
+      <ActionPanel.Section>
+        {/* Submenu rather than three top-level actions: these are one-time
+            setup steps, and flattening them pushed Delete off the visible
+            portion of the panel. */}
+        <ActionPanel.Submenu title={t("bookmarkItem.actions.addToBrowser")} icon={Icon.Globe}>
+          <Action.OpenInBrowser
+            title={t("bookmarkItem.actions.browsers.chrome")}
+            url="https://chromewebstore.google.com/detail/karakeep/kgcjekpmcjjogibpjebkhaanilehneje"
+            icon={Icon.Globe}
+          />
+          <Action.OpenInBrowser
+            title={t("bookmarkItem.actions.browsers.firefox")}
+            url="https://addons.mozilla.org/en-US/firefox/addon/karakeep/"
+            icon={Icon.Globe}
+          />
+          <Action.OpenInBrowser
+            title={t("bookmarkItem.actions.browsers.safari")}
+            url="https://apps.apple.com/us/app/karakeeper-bookmarker/id6746722790"
+            icon={Icon.Globe}
+          />
+        </ActionPanel.Submenu>
       </ActionPanel.Section>
       <ActionPanel.Section>
         <Action
@@ -523,6 +541,8 @@ export function BookmarkItem({
   onCleanCache,
   onVisit,
   isSelected,
+  lists,
+  isLoadingLists,
 }: BookmarkItemProps) {
   const { t } = useTranslation();
   const [bookmark, setBookmark] = useState<Bookmark>(initialBookmark);
@@ -534,6 +554,7 @@ export function BookmarkItem({
     Boolean(isSelected) &&
     ((bookmark.content.type === "link" && config.displayBookmarkPreview) ||
       (bookmark.content.type === "asset" && bookmark.content.assetType === "image"));
+
   const images = useBookmarkImages(bookmark, shouldPrewarmPreview);
 
   const handlers = useBookmarkHandlers({
@@ -592,7 +613,7 @@ export function BookmarkItem({
       icon={getIcon()}
       detail={
         <List.Item.Detail
-          markdown={previewImage ? `<img src="${previewImage}" center width="300" />` : ""}
+          markdown={previewImage ? markdownImage(previewImage, getDisplayTitle(), { raycastWidth: 300 }) : ""}
           metadata={<BookmarkMetadata bookmark={bookmark} config={config} t={t} />}
         />
       }
@@ -606,6 +627,8 @@ export function BookmarkItem({
           images={images}
           t={t}
           onVisit={onVisit}
+          lists={lists}
+          isLoadingLists={isLoadingLists}
         />
       }
     />

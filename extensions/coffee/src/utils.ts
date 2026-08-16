@@ -15,14 +15,8 @@ export async function startCaffeinate(updates: Updates, hudMessage?: string, add
   }
   await stopCaffeinate({ menubar: false, status: false });
 
-  // Use spawn with detached: true to properly detach the caffeinate process
-  // This prevents zombie processes when the extension helper exits
-  const args = generateArgs(additionalArgs).split(/\s+/).filter(Boolean);
-  const child = spawn("/usr/bin/caffeinate", args, {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.on("exit", () => {});
+  const args = ["-u", ...generateArgs(additionalArgs).split(/\s+/).filter(Boolean)];
+  const child = spawn("/usr/bin/caffeinate", args, { detached: true, stdio: "ignore" });
   child.unref();
 
   await update(updates, true);
@@ -91,6 +85,27 @@ export async function getSchedule() {
 
   const schedule: Schedule = JSON.parse(getSchedule);
   return schedule;
+}
+
+export function parseSchedule(value: string | number | boolean): Schedule | undefined {
+  if (typeof value !== "string") return undefined;
+
+  try {
+    const schedule = JSON.parse(value) as Partial<Schedule>;
+    if (
+      typeof schedule.day === "string" &&
+      typeof schedule.from === "string" &&
+      typeof schedule.to === "string" &&
+      typeof schedule.IsManuallyDecafed === "boolean" &&
+      typeof schedule.IsRunning === "boolean"
+    ) {
+      return schedule as Schedule;
+    }
+  } catch {
+    // Ignore unrelated local storage values.
+  }
+
+  return undefined;
 }
 
 export async function changeScheduleState(operation: string, schedule: Schedule) {

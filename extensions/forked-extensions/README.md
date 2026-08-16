@@ -4,7 +4,7 @@ Efficiently manage your forked Raycast extensions using Git sparse-checkout. Exp
 
 ## Principles
 
-This extension leverages the [Git sparse-checkout](https://git-scm.com/docs/git-sparse-checkout) feature to efficiently manage your forked extensions. Our goal is to eliminate the need for cloning the entire repository, which can exceed 20 GB in size, by enabling sparse-checkout. With this extension, you can forgo Ray CLI's commands, allowing you to use Git commands directly and regular [GitHub flow](https://docs.github.com/en/get-started/using-github/github-flow) for managing your extensions.
+This extension leverages [Git sparse-checkout](https://git-scm.com/docs/git-sparse-checkout) together with partial clone filters to efficiently manage your forked extensions. Our goal is to eliminate the need for cloning the entire repository, which can exceed 20 GB in size, by only checking out the directories you need and by limiting future fetches to the smallest useful object set. With this extension, you can forgo Ray CLI's commands, allowing you to use Git commands directly and regular [GitHub flow](https://docs.github.com/en/get-started/using-github/github-flow) for managing your extensions.
 
 Please note with this extension you no longer need to use Ray CLI's `pull-contributions` and `publish` commands. Just use Git commands or your favorite Git GUI tool to manage your forked extensions.
 
@@ -22,6 +22,7 @@ If you are unfamiliar with basic Git concepts, this extension may not be for you
 - [x] Remove an extension from forked list
 - [x] Synchronizes the forked repository with the upstream repository on local
 - [x] Manage sparse-checkout directories via UI
+- [x] Clean up and optimize the managed repository via UI
 
 ## GitHub Permission Scopes
 
@@ -46,14 +47,11 @@ You can add a directory with the `git sparse-checkout add` command. Or use this 
 
 ### "I used this extension to convert an existing full-checkout repository to sparse-checkout but my `.git` folder still has a massive size"
 
-You might need some manual cleanup to reduce the size of your `.git` folder. Here are a few methods you can take:
+New repositories created or reconfigured by this extension use the `tree:0` partial clone filter, disable automatic tag downloads, and only track `upstream/main` by default to keep future fetches smaller.
 
-- Use [git-gc](https://git-scm.com/docs/git-gc) to clean up unnecessary files and optimize the local repository
-- Use [git-fsck](https://git-scm.com/docs/git-fsck) to check the integrity of the repository
-- Use [git-prune](https://git-scm.com/docs/git-prune) to remove any objects that are no longer referenced by your branches
-- Use [git-maintenance](https://git-scm.com/docs/git-maintenance) to perform various maintenance tasks on your repository
+To clean up an existing repository, open the "Manage Forked Extensions" command and choose "Clean Up Repository". After confirmation, the action runs `git maintenance run --task=gc` in the foreground and reports the pack count and packed size before and after it finishes. It does not install or schedule background maintenance.
 
-But we recommend using a new clone of the repository to start fresh with a smaller `.git` folder.
+Git maintenance can consolidate pack files and reclaim unreachable objects, but it cannot remove objects that are still reachable from your repository's branches, tags, or other references. If your `.git` folder remains very large after cleanup, we recommend starting fresh with a new clone.
 
 ## License
 

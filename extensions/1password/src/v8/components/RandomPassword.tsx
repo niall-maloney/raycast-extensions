@@ -1,10 +1,9 @@
 import { Action, ActionPanel, Clipboard, Form, Icon, Keyboard, showToast, Toast } from "@raycast/api";
 import { useForm } from "@raycast/utils";
-import { execFileSync } from "node:child_process";
 import { useEffect, useState } from "react";
 
 import { Item } from "../types";
-import { getCliPath } from "../utils";
+import { isWindows, op } from "../utils";
 
 import Shortcut = Keyboard.Shortcut;
 import Style = Toast.Style;
@@ -35,17 +34,22 @@ export function RandomPassword() {
 
       try {
         // https://1password.community/discussion/139189/feature-request-generate-random-passwords-with-cli-via-dedicated-command-e-g-op-generate
-        const stdout = execFileSync(getCliPath(), [
-          "item",
-          "create",
-          "--dry-run",
-          "--category",
-          "Password",
-          `--generate-password=${args.join(",")}`,
-          "--format",
-          "json",
-        ]);
-        const item: Item = JSON.parse(stdout.toString());
+        // Stays on the synchronous helper: `op item create` reads a piped stdin, so it needs
+        // `stdio: ["ignore", ...]`, which the async `execFile`-based path cannot express.
+        const stdout = op(
+          [
+            "item",
+            "create",
+            "--dry-run",
+            "--category",
+            "Password",
+            `--generate-password=${args.join(",")}`,
+            "--format",
+            "json",
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const item: Item = JSON.parse(stdout);
         const password = item.fields
           ?.filter((field) => field.id === "password")
           .filter(Boolean)
@@ -53,9 +57,12 @@ export function RandomPassword() {
           .at(0);
 
         setGeneratedPassword(password || "ERROR");
-        await Clipboard.copy(password || "", { concealed: true });
+        // Clipboard.copy closes main window on Windows: https://github.com/raycast/extensions/issues/26731
+        if (!isWindows) {
+          await Clipboard.copy(password || "", { concealed: true });
+        }
         toast.style = Style.Success;
-        toast.title = "Copied to clipboard!";
+        toast.title = isWindows ? "Password generated!" : "Copied to clipboard!";
         toast.message = "";
       } catch (e) {
         toast.style = Style.Failure;

@@ -2,7 +2,12 @@ import { Action, ActionPanel, Form, LaunchProps, useNavigation } from "@raycast/
 import { useForm } from "@raycast/utils";
 import { useEffect, useState } from "react";
 import { logger } from "@chrismessina/raycast-logger";
-import { fetchAddBookmarkToList, fetchAttachTagsToBookmark, fetchCreateBookmark } from "./apis";
+import {
+  fetchAddBookmarkToList,
+  fetchAttachTagsToBookmark,
+  fetchCreateBookmarkResult,
+  fetchUpdateBookmark,
+} from "./apis";
 import { useGetAllLists } from "./hooks/useGetAllLists";
 import { useGetAllTags } from "./hooks/useGetAllTags";
 import { useTagPicker, TAG_PICKER_NOOP_VALUE } from "./hooks/useTagPicker";
@@ -11,12 +16,17 @@ import { useConfig } from "./hooks/useConfig";
 import { getBrowserLink } from "./hooks/useBrowserLink";
 import { validUrl } from "./utils/url";
 import { runWithToast } from "./utils/toast";
+import { ensureReachable } from "./utils/submitGuard";
+import { useApiReachable } from "./hooks/useApiReachable";
+import { OfflineFormNotice, StartKarakeepAction } from "./components/OfflineFormNotice";
 import CreateListView from "./createList";
 
 const log = logger.child("[CreateBookmark]");
+const MAX_TITLE_LENGTH = 1000;
 
 interface FormValues {
   url: string;
+  title: string;
   list?: string;
 }
 
@@ -28,8 +38,13 @@ interface DraftValues extends FormValues {
 export default function CreateBookmarkView(props: LaunchProps<{ draftValues: DraftValues }>) {
   const { pop, push } = useNavigation();
   const { t } = useTranslation();
-  const { lists, revalidate: revalidateLists } = useGetAllLists();
-  const { tags } = useGetAllTags();
+  // Hold the lists/tags fetches until the API is known to be up. Firing them
+  // blind is what produced Raycast's opaque "Failed to fetch latest data /
+  // fetch failed" toast before any of our own handling could run.
+  const { state: reachability, reachable: apiReachable, offline, isRecovering, canStart, start } = useApiReachable();
+  const { lists, revalidate: revalidateLists } = useGetAllLists(apiReachable);
+  const { tags } = useGetAllTags(apiReachable);
+
   const { config } = useConfig();
   const { draftValues } = props;
   const [isLoadingTab, setIsLoadingTab] = useState(false);
@@ -48,6 +63,7 @@ export default function CreateBookmarkView(props: LaunchProps<{ draftValues: Dra
   const { handleSubmit, itemProps, setValue, values } = useForm<FormValues>({
     initialValues: {
       url: draftValues?.url ?? "",
+      title: draftValues?.title ?? "",
       list: draftValues?.list ?? "",
     },
     validation: {
@@ -56,21 +72,40 @@ export default function CreateBookmarkView(props: LaunchProps<{ draftValues: Dra
         if (!validUrl(value)) return t("bookmark.urlInvalid");
         return undefined;
       },
+      title: (value: string | undefined) => {
+        if (value && value.trim().length > MAX_TITLE_LENGTH) return t("bookmark.titleTooLong");
+        return undefined;
+      },
     },
     async onSubmit(values) {
       log.info("Submitting bookmark", { url: values.url, hasList: Boolean(values.list) });
+
+      // Pre-flight: if the instance is a stopped local container, offer to start
+      // it BEFORE attempting the write. Submitting into a dead server just to
+      // fail is the path that puts the typed-in URL at risk.
+      const recovered = await ensureReachable(values.url);
+      if (recovered === "unreachable") {
+        // The form stays mounted with its values intact, so nothing is lost;
+        // the URL is on the clipboard as a second line of defence.
+        return;
+      }
+
       try {
         const bookmark = await runWithToast({
           loading: { title: t("bookmark.creating") },
           success: { title: t("bookmark.createSuccess") },
           failure: { title: t("bookmark.createFailed") },
           action: async () => {
+            const title = values.title.trim();
             const payload = {
               type: "link",
               url: values.url,
               createdAt: new Date().toISOString(),
+              ...(title ? { title } : {}),
             };
-            const created = await fetchCreateBookmark(payload);
+            const result = await fetchCreateBookmarkResult(payload);
+            const created =
+              title && !result.wasCreated ? await fetchUpdateBookmark(result.bookmark.id, { title }) : result.bookmark;
 
             if (values.list) {
               await fetchAddBookmarkToList(values.list, created.id);
@@ -130,10 +165,13 @@ export default function CreateBookmarkView(props: LaunchProps<{ draftValues: Dra
 
   return (
     <Form
-      isLoading={isLoadingTab}
+      isLoading={isLoadingTab || reachability === "checking"}
       enableDrafts
       actions={
         <ActionPanel>
+          {/* First = bound to ↵. While offline the form can't submit, so Start
+              takes the primary slot and Submit steps down to second. */}
+          <StartKarakeepAction offline={offline} canStart={canStart} isRecovering={isRecovering} onStart={start} />
           <Action.SubmitForm title={t("bookmark.create")} onSubmit={handleSubmit} />
           <Action
             title={t("list.createList")}
@@ -152,7 +190,15 @@ export default function CreateBookmarkView(props: LaunchProps<{ draftValues: Dra
         </ActionPanel>
       }
     >
+      <OfflineFormNotice offline={offline} canStart={canStart} />
+
       <Form.TextField {...itemProps.url} title={t("bookmark.url")} placeholder={t("bookmark.urlPlaceholder")} />
+
+      <Form.TextField
+        {...itemProps.title}
+        title={t("bookmark.createTitle")}
+        placeholder={t("bookmark.createTitlePlaceholder")}
+      />
 
       <Form.Dropdown title={t("bookmark.list")} {...itemProps.list}>
         <Form.Dropdown.Item value="" title={t("bookmark.defaultListPlaceholder")} />

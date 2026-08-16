@@ -1,12 +1,16 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 
+import { readOpencodeAuthToken } from "../agents/opencode-auth.ts";
+
 /**
- * Auto-discover ZAI API key from shell environment variables,
- * matching the openusage plugin behavior (ctx.host.env.get).
+ * Auto-discover ZAI API key from multiple sources:
+ * 1. Manual preference (if set) - overrides everything
+ * 2. OpenCode auth.json (zai-coding-plan entry)
+ * 3. Shell environment variables (ZAI_API_KEY / GLM_API_KEY)
  *
  * Raycast is a GUI app and does not inherit shell env vars from .zshrc/.bashrc.
- * We spawn a login shell to resolve them, checking ZAI_API_KEY then GLM_API_KEY.
+ * We spawn a login shell to resolve them when needed.
  */
 
 const execFileAsync = promisify(execFile);
@@ -37,21 +41,32 @@ function extractMarkedValue(output: string, startMarker: string, endMarker: stri
 }
 
 function parseShellLookupOutput(output: string): { zaiToken: string | null; glmToken: string | null } {
+  const zaiToken = extractMarkedValue(output, ZAI_START_MARKER, ZAI_END_MARKER);
+  const glmToken = extractMarkedValue(output, GLM_START_MARKER, GLM_END_MARKER);
+
   return {
-    zaiToken: extractMarkedValue(output, ZAI_START_MARKER, ZAI_END_MARKER),
-    glmToken: extractMarkedValue(output, GLM_START_MARKER, GLM_END_MARKER),
+    zaiToken: zaiToken === "%ZAI_API_KEY%" ? null : zaiToken,
+    glmToken: glmToken === "%GLM_API_KEY%" ? null : glmToken,
   };
 }
 
 async function readShellEnvTokens(): Promise<{ zaiToken: string | null; glmToken: string | null }> {
   try {
-    const shell = process.env.SHELL || "/bin/zsh";
-    const lookupScript = [
-      `printf '${ZAI_START_MARKER}%s${ZAI_END_MARKER}\\n' "$ZAI_API_KEY"`,
-      `printf '${GLM_START_MARKER}%s${GLM_END_MARKER}\\n' "$GLM_API_KEY"`,
-    ].join("; ");
+    const shell = process.env.SHELL || (process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : "/bin/zsh");
+    const shellName = shell.replaceAll("\\", "/").split("/").pop()?.toLowerCase() ?? "";
+    const isCommandShell = shellName === "cmd.exe" || shellName.endsWith(".cmd") || shellName.endsWith(".bat");
+    const lookupScript = isCommandShell
+      ? `echo ${ZAI_START_MARKER}%ZAI_API_KEY%${ZAI_END_MARKER} & echo ${GLM_START_MARKER}%GLM_API_KEY%${GLM_END_MARKER}`
+      : [
+          `printf '${ZAI_START_MARKER}%s${ZAI_END_MARKER}\\n' "$ZAI_API_KEY"`,
+          `printf '${GLM_START_MARKER}%s${GLM_END_MARKER}\\n' "$GLM_API_KEY"`,
+        ].join("; ");
+    const shellArgs = isCommandShell ? ["/d", "/s", "/c", lookupScript] : ["-ilc", lookupScript];
+    const isBatchShell = shellName.endsWith(".cmd") || shellName.endsWith(".bat");
+    const executable = isBatchShell ? process.env.ComSpec || "cmd.exe" : shell;
+    const executableArgs = isBatchShell ? ["/d", "/c", shell] : shellArgs;
 
-    const { stdout } = await execFileAsync(shell, ["-ilc", lookupScript], {
+    const { stdout } = await execFileAsync(executable, executableArgs, {
       encoding: "utf-8",
       timeout: SHELL_LOOKUP_TIMEOUT_MS,
       maxBuffer: 64 * 1024,
@@ -63,7 +78,7 @@ async function readShellEnvTokens(): Promise<{ zaiToken: string | null; glmToken
   }
 }
 
-async function readLocalToken(): Promise<string | null> {
+async function readEnvToken(): Promise<string | null> {
   // 1. Check process.env directly (in case Raycast inherits it)
   const direct = cleanToken(process.env.ZAI_API_KEY) ?? cleanToken(process.env.GLM_API_KEY);
   if (direct) return direct;
@@ -77,30 +92,38 @@ interface ResolveZaiAuthTokensResult {
   primaryToken: string | null;
   localToken: string | null;
   preferenceToken: string | null;
+  allTokens: string[]; // ordered list of all non-empty discovered tokens
 }
 
 export async function resolveZaiAuthTokens(
-  options: { preferenceToken?: string } = {},
+  options: { preferenceToken?: string; preferenceToken2?: string } = {},
 ): Promise<ResolveZaiAuthTokensResult> {
-  const localToken = await readLocalToken();
-  const preferenceToken = cleanToken(options.preferenceToken);
+  const candidates: string[] = [];
+
+  const pref1 = cleanToken(options.preferenceToken);
+  if (pref1) candidates.push(pref1);
+
+  // Auto-detect only when no primary preference override
+  if (!pref1) {
+    const opencodeToken = readOpencodeAuthToken("zai-coding-plan");
+    const envToken = await readEnvToken();
+    const localToken = opencodeToken ?? envToken;
+    if (localToken) candidates.push(localToken);
+  }
+
+  // Append second preference token if provided and not already present
+  const pref2 = cleanToken(options.preferenceToken2);
+  if (pref2 && !candidates.includes(pref2)) {
+    candidates.push(pref2);
+  }
+
+  const primaryToken = candidates[0] ?? null;
+  const localToken = pref1 ? null : (candidates[0] ?? null);
 
   return {
-    primaryToken: localToken ?? preferenceToken,
+    primaryToken,
     localToken,
-    preferenceToken,
+    preferenceToken: pref1,
+    allTokens: candidates,
   };
-}
-
-export function shouldFallbackToPreferenceToken(options: {
-  localToken: string | null;
-  preferenceToken: string | null;
-  errorType?: string;
-}): boolean {
-  return (
-    options.errorType === "unauthorized" &&
-    options.localToken !== null &&
-    options.preferenceToken !== null &&
-    options.localToken !== options.preferenceToken
-  );
 }

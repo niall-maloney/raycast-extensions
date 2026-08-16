@@ -3,7 +3,6 @@ import {
   ActionPanel,
   Clipboard,
   closeMainWindow,
-  environment,
   Form,
   Icon,
   List,
@@ -17,9 +16,10 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 import {
   checkZsh,
   CommandLineMissingError,
-  errorRegex,
+  extractOpErrorMessage,
   getCliPath,
   getSignInStatus,
+  isWindows,
   signIn,
   useAccounts,
   ZSH_PATH,
@@ -45,12 +45,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return <Guide />;
   }
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(getSignInStatus());
+  // Lazy: called directly, this would shell out to the CLI on every render.
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => getSignInStatus());
   const [zshMissing] = useState<boolean>(!checkZsh());
   const [accountSelected, setAccountSelected] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState("");
   const { data, error, isLoading } = useAccounts(!accountSelected);
-  const raycastProtocol = environment.raycastVersion.includes("alpha") ? "raycastinternal://" : "raycast://";
+  const raycastProtocol = `${process.env.RAYCAST_SCHEME ?? "raycast"}://`;
   const onSubmit = async (values: Form.Values) => {
     const toast = await showToast({
       style: Toast.Style.Animated,
@@ -80,14 +81,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   const authenticate = async () => {
-    await closeMainWindow({ popToRootType: PopToRootType.Suspended });
+    if (!isWindows) {
+      await closeMainWindow({ popToRootType: PopToRootType.Suspended });
+    }
     const toast = await showToast({
       style: Toast.Style.Animated,
       title: "Authenticating...",
     });
 
     try {
-      if (!ZSH_PATH) {
+      if (!isWindows && !ZSH_PATH) {
         throw new ZshMissingError("Zsh Binary Path Missing!");
       }
 
@@ -109,13 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      const errorMessageMatches = err.message.match(errorRegex);
-
-      if (errorMessageMatches && errorMessageMatches[1]) {
-        setErrorMessage(errorMessageMatches[1]);
-      } else {
-        setErrorMessage(err.message);
-      }
+      setErrorMessage(extractOpErrorMessage(err.message));
 
       if (err.message.includes("multiple accounts found")) return setAccountSelected(false);
       toast.style = Toast.Style.Failure;
@@ -163,6 +160,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           actions={
             <ActionPanel>
               <Action icon={Icon.Repeat} key="reload-view" onAction={() => authenticate()} title="Reload" />
+              {errorMessage ? (
+                <Action.CopyToClipboard
+                  content={errorMessage}
+                  icon={Icon.Clipboard}
+                  key="copy-error"
+                  title="Copy Error Details"
+                />
+              ) : null}
             </ActionPanel>
           }
           description={errorMessage || "Please authenticate using the requested method to proceed."}
